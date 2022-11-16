@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from timm.models.layers import drop_path, to_2tuple, trunc_normal_
 from timm.models.registry import register_model
-print(1)
+
 
 def _cfg(url='', **kwargs):
     return {
@@ -15,7 +15,6 @@ def _cfg(url='', **kwargs):
         'mean': (0.5, 0.5, 0.5), 'std': (0.5, 0.5, 0.5),
         **kwargs
     }
-
 
 class DropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample  (when applied in main path of residual blocks).
