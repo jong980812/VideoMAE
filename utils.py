@@ -272,20 +272,21 @@ def init_distributed_mode(args):
     #     addr = subprocess.getoutput(
     #         f'scontrol show hostname {node_list} | head -n1')
     #     os.environ['MASTER_ADDR'] = addr
-    elif 'SLURM_PROCID' in os.environ:
-        args.rank = int(os.environ['SLURM_PROCID'])
-        args.gpu = int(os.environ['SLURM_LOCALID'])
-        args.world_size = int(os.environ['SLURM_NTASKS'])
-        os.environ['RANK'] = str(args.rank)
-        os.environ['LOCAL_RANK'] = str(args.gpu)
-        os.environ['WORLD_SIZE'] = str(args.world_size)
-
-        node_list = os.environ['SLURM_NODELIST']
-        addr = subprocess.getoutput(
-            f'scontrol show hostname {node_list} | head -n1')
-        if 'MASTER_ADDR' not in os.environ:
-            os.environ['MASTER_ADDR'] = addr
+    # elif 'SLURM_PROCID' in os.environ:
+    #     args.rank = int(os.environ['SLURM_PROCID'])
+    #     args.gpu = int(os.environ['SLURM_LOCALID'])
+    #     args.world_size = int(os.environ['SLURM_NTASKS'])
+    #     os.environ['RANK'] = str(args.rank)
+    #     os.environ['LOCAL_RANK'] = str(args.gpu)
+    #     os.environ['WORLD_SIZE'] = str(args.world_size)
+    #     node_list = os.environ['SLURM_NODELIST']
+    #     addr = subprocess.getoutput(
+    #         f'scontrol show hostname {node_list} | head -n1')
+    #     if 'MASTER_ADDR' not in os.environ:
+    #         os.environ['MASTER_ADDR'] = addr
+    #    # print(node_list)#! 여기까지 argument 적용은됌.
     elif 'RANK' in os.environ and 'WORLD_SIZE' in os.environ:
+        print("AAA")
         args.rank = int(os.environ["RANK"])
         args.world_size = int(os.environ['WORLD_SIZE'])
         args.gpu = int(os.environ['LOCAL_RANK'])
@@ -295,14 +296,15 @@ def init_distributed_mode(args):
         return
 
     args.distributed = True
-
-    torch.cuda.set_device(args.gpu)
     args.dist_backend = 'nccl'
+   
+    
     print('| distributed init (rank {}): {}, gpu {}'.format(
         args.rank, args.dist_url, args.gpu), flush=True)
     torch.distributed.init_process_group(backend=args.dist_backend, init_method=args.dist_url,
                                          world_size=args.world_size, rank=args.rank)
     torch.distributed.barrier()
+    torch.cuda.set_device(args.gpu)
     # assert torch.distributed.is_initialized()
     setup_for_distributed(args.rank == 0)
 

@@ -36,7 +36,6 @@ def get_args():
     parser.add_argument('--save_ckpt_freq', default=100, type=int)
     # add my code.
     parser.add_argument('--cross_attn', action='store_true', default=False)
-
     # Model parameters
     parser.add_argument('--model', default='cross_vit_base_patch16_224', type=str, metavar='MODEL',
                         help='Name of model to train')
@@ -162,7 +161,7 @@ def get_args():
                         help='resume from checkpoint')
     parser.add_argument('--auto_resume', action='store_true')
     parser.add_argument('--no_auto_resume', action='store_false', dest='auto_resume')
-    parser.set_defaults(auto_resume=True)
+    # parser.set_defaults(auto_resume=True)
 
     parser.add_argument('--save_ckpt', action='store_true')
     parser.add_argument('--no_save_ckpt', action='store_false', dest='save_ckpt')
