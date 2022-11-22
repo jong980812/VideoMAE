@@ -15,18 +15,21 @@ else
 fi
 
 
-cd ~/.cache
-rm -r torch_extensions
+# cd ~/.cache
+# rm -r torch_extensions
 export NCCL_DEBUG=INFO
 
 DATA_PATH=/data/jong980812/project/VideoMAE_cross/dataset/mini_ssv2
 MODEL_PATH=/data/jong980812/project/VideoMAE_cross/pretrained/ssv2_pretrained.pth
-OUTPUT_DIR=/data/jong980812/project/VideoMAE_cross/result/DDP_3N_8G/OUT # weight저장.
+
+
+OUTPUT_DIR=$4 # weight저장.
 MASTER_NODE=$1
-torchrun --nproc_per_node=8 \
-    --master_port $3 --nnodes=3 \
+OMP_NUM_THREADS=1 python -m torch.distributed.launch \
+    --nproc_per_node=$6 \
+    --master_port $3 --nnodes=$5 \
     --node_rank=$2 --master_addr=${MASTER_NODE} \
-    /data/jong980812/project/VideoMAE_cross/run_cross_finetuning.py \
+    /data/jong980812/project/VideoMAE_experiments/run_cross_finetuning.py \
     --data_set MINI_SSV2 \
     --nb_classes 87 \
     --cross_attn \
@@ -34,22 +37,32 @@ torchrun --nproc_per_node=8 \
     --finetune ${MODEL_PATH} \
     --log_dir ${OUTPUT_DIR} \
     --output_dir ${OUTPUT_DIR} \
-    --batch_size 12 \
+    --batch_size 10 \
     --input_size 224 \
     --short_side_size 224 \
-    --save_ckpt_freq 5 \
+    --save_ckpt_freq 10 \
     --num_sample 1 \
     --num_frames 16 \
     --opt adamw \
     --lr 1e-3 \
     --opt_betas 0.9 0.999 \
     --weight_decay 0.05 \
-    --epochs 100 \
+    --epochs 150 \
     --dist_eval \
     --test_num_segment 2 \
     --test_num_crop 3 \
     --num_workers 8 \
     --seed 0 \
     --enable_deepspeed \
-    --freeze_vmae \
-    --warmup_epochs 15  
+    --warmup_epochs 15 \
+    --non_freeze_block_names "head" "fc_norm" "norm1" "attn" "cross_norm" "norm2" 
+
+
+
+# if [ ${SLURM_NODELIST} == $1 ]
+# then
+#     echo "" > /data/jong980812/project/VideoMAE_experiments/results.txt
+#     today="###Date: `date +%D` Time: `date +%T`###"
+#     train_time=`tail -1  $OUTPUT_DIR/log.txt`
+#     echo -e "${today} $5 Node $6 GPU ${train_time} OUTPUT: $OUTPUT_DIR"
+# fi
