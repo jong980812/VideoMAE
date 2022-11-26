@@ -1,0 +1,5 @@
+result/
+multinode_sh/
+dataset/
+*.sw*
+*.json
