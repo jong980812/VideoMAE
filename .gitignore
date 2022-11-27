@@ -3,3 +3,7 @@ multinode_sh/
 dataset/
 *.sw*
 *.json
+.vscode
+
+toy_example.py
+*.pyc
