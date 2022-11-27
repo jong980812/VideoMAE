@@ -9,7 +9,7 @@ result/
 *.out
 *.sw*
 *.DS_Store
-
+multinode_sh/
 *.sh
 *.err
 *.pt

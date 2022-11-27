@@ -188,7 +188,8 @@ def get_args():
                         help='url used to set up distributed training')
 
     parser.add_argument('--enable_deepspeed', action='store_true', default=False)
-    parser.add_argument('--freeze_vmae', action='store_true', default=False)
+    parser.add_argument('--non_freeze_block_names',nargs='+', type=str, default=None,
+                        help='patch_embed, norm, attn, cross_norm, cross, mlp, fc_norm, head')
 
     known_args, _ = parser.parse_known_args()
 
