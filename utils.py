@@ -580,7 +580,7 @@ def cross_multiple_samples_collate(batch, fold=False):
         return s_inputs, t_inputs, labels, video_idx, extra_data
     
 def freeze_stlayers(model):
-    block_list = ['attn']
+    block_list = ['attn','patch_embed','mlp']
     for name, param in model.named_parameters():
         for block in block_list:
             if block in name:

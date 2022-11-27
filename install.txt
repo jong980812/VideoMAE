@@ -1,9 +1,0 @@
-timm==0.4.12
-deepspeed==0.5.8
-TensorboardX
-decord
-einops
-opecncv-python
-pandas
-tqdm
-scipy
