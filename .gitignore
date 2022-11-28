@@ -4,6 +4,7 @@ dataset/
 *.sw*
 *.json
 .vscode
-
+*.sh
 toy_example.py
 *.pyc
+toycheck.ipynb
