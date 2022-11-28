@@ -1,0 +1,9 @@
+pretrained/
+result/
+weights/
+dataset/
+
+*.txt
+*.sh
+*.json
+*.pyc

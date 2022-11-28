@@ -19,7 +19,7 @@ from optim_factory import create_optimizer, get_parameter_groups, LayerDecayValu
 
 from datasets import build_dataset
 from engine_for_crossattn import train_one_epoch, validation_one_epoch, final_test, merge
-from utils import NativeScalerWithGradNormCount as NativeScaler, change_verification_mode, freeze_stlayers
+from utils import NativeScalerWithGradNormCount as NativeScaler, change_verification_mode, set_unfreeze_block
 from utils import  cross_multiple_samples_collate
 import utils
 import modeling_finetune
@@ -394,7 +394,7 @@ def main(args, ds_init):
     clip_model.visual.proj = None
     # freeze space-time joint attention layers
     if args.freeze_vmae:
-        freeze_stlayers(model)
+        set_unfreeze_block(model)
     
     
     model_ema = None
