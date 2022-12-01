@@ -170,7 +170,7 @@ class CrossAttention(nn.Module):
         t_x = self.proj_drop(t_x)
         return t_x
     
-class Block(nn.Module):
+class Cross_Block(nn.Module):
 
     def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, qk_scale=None, drop=0., attn_drop=0.,
                  drop_path=0., init_values=None, act_layer=nn.GELU, norm_layer=nn.LayerNorm,
@@ -185,8 +185,11 @@ class Block(nn.Module):
             self.adapter_norm = nn.Identity()
             self.adapter = nn.Identity()
         else:
-            self.adapter_norm = norm_layer(dim)
-            self.adapter = Adapter(dim, down_ratio)
+            self.b_adapter_norm = norm_layer(dim)
+            self.b_adapter = Adapter(dim, down_ratio)
+            self.a_adapter_norm = norm_layer(dim)
+            self.a_adapter = Adapter(dim, down_ratio)
+            
         
         self.cross_norm = norm_layer(dim)
         self.cross = CrossAttention(
@@ -208,8 +211,9 @@ class Block(nn.Module):
     def forward(self,s_x, t_x):
         if self.gamma_1 is None:
             t_x = t_x + self.drop_path(self.attn(self.norm1(t_x)))
-            t_x = t_x + self.drop_path(self.adapter(self.adapter_norm(t_x))) # for adapter layer
+            t_x = t_x + self.drop_path(self.b_adapter(self.b_adapter_norm(t_x))) # for adapter layer
             t_x = t_x + self.drop_path(self.cross(s_x, self.cross_norm(t_x)))
+            t_x = t_x + self.drop_path(self.a_adapter(self.a_adapter_norm(t_x)))
             t_x = t_x + self.drop_path(self.mlp(self.norm2(t_x)))
         else:
             t_x = t_x + self.drop_path(self.gamma_1 * self.attn(self.norm1(t_x)))
@@ -217,6 +221,36 @@ class Block(nn.Module):
             t_x = t_x + self.drop_path(self.gamma_3 * self.mlp(self.norm3(t_x)))
         return t_x
 
+class Block(nn.Module):
+    
+    def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, qk_scale=None, drop=0., attn_drop=0.,
+                 drop_path=0., init_values=None, act_layer=nn.GELU, norm_layer=nn.LayerNorm,
+                 attn_head_dim=None):
+        super().__init__()
+        self.norm1 = norm_layer(dim)
+        self.attn = Attention(
+            dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale,
+            attn_drop=attn_drop, proj_drop=drop, attn_head_dim=attn_head_dim)
+        # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
+        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
+        self.norm2 = norm_layer(dim)
+        mlp_hidden_dim = int(dim * mlp_ratio)
+        self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
+
+        if init_values > 0:
+            self.gamma_1 = nn.Parameter(init_values * torch.ones((dim)),requires_grad=True)
+            self.gamma_2 = nn.Parameter(init_values * torch.ones((dim)),requires_grad=True)
+        else:
+            self.gamma_1, self.gamma_2 = None, None
+
+    def forward(self, x):
+        if self.gamma_1 is None:
+            x = x + self.drop_path(self.attn(self.norm1(x)))
+            x = x + self.drop_path(self.mlp(self.norm2(x)))
+        else:
+            x = x + self.drop_path(self.gamma_1 * self.attn(self.norm1(x)))
+            x = x + self.drop_path(self.gamma_2 * self.mlp(self.norm2(x)))
+        return x
 
 
 class PatchEmbed(nn.Module):
@@ -284,7 +318,8 @@ class CrossTransformer(nn.Module):
                  all_frames=16,
                  tubelet_size=2,
                  use_mean_pooling=True,
-                 down_ratio=None, # down proj ratio for adapter
+                 down_ratio=2, # down proj ratio for adapter
+                 cross_block_num=2,
                  pretrained_cfg = None):
         
         super().__init__()
@@ -305,12 +340,20 @@ class CrossTransformer(nn.Module):
 
 
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]  # stochastic depth decay rule
-        self.blocks = nn.ModuleList([
-            Block(
-                dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
+        self.origin_blocks = nn.ModuleList([
+            Block(dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
                 drop=drop_rate, attn_drop=attn_drop_rate, drop_path=dpr[i], norm_layer=norm_layer,
-                init_values=init_values, down_ratio=down_ratio)
-            for i in range(depth)])
+                init_values=init_values
+                )
+            for i in range(depth-cross_block_num)])
+        
+        self.cross_blocks= nn.ModuleList([
+            Cross_Block(dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
+                drop=drop_rate, attn_drop=attn_drop_rate, drop_path=dpr[i], norm_layer=norm_layer,
+                init_values=init_values, down_ratio=down_ratio  
+                )
+            for i in range(depth-cross_block_num,depth)
+        ])
         self.norm = nn.Identity() if use_mean_pooling else norm_layer(embed_dim)
         self.fc_norm = norm_layer(embed_dim) if use_mean_pooling else None
         self.head = nn.Linear(embed_dim, num_classes) if num_classes > 0 else nn.Identity()
@@ -334,7 +377,7 @@ class CrossTransformer(nn.Module):
             nn.init.constant_(m.weight, 1.0)
 
     def get_num_layers(self):
-        return len(self.blocks)
+        return len(self.origin_blocks)+len(self.cross_blocks)
 
     @torch.jit.ignore
     def no_weight_decay(self):
@@ -357,8 +400,10 @@ class CrossTransformer(nn.Module):
         if self.pos_embed is not None:
             t_x = t_x + self.pos_embed.expand(B, -1, -1).type_as(t_x).to(t_x.device).clone().detach()
         t_x = self.pos_drop(t_x)
-
-        for blk in self.blocks:
+        for blk in self.origin_blocks:
+            t_x=blk(t_x)
+        
+        for blk in self.cross_blocks:
             t_x = blk(s_x, t_x)
 
         t_x = self.norm(t_x)

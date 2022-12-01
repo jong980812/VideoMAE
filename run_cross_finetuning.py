@@ -192,7 +192,7 @@ def get_args():
     #for pick freeze layers
     parser.add_argument('--non_freeze_block_names',nargs='+', type=str, default=None,
                         help='patch_embed, norm, attn, cross_norm, cross, mlp, fc_norm, head')
-
+    parser.add_argument('--num_cross_blocks',type=int,default=1)
     known_args, _ = parser.parse_known_args()
 
     if known_args.enable_deepspeed:
