@@ -9,10 +9,6 @@ from timm.utils import accuracy, ModelEma
 import utils
 from scipy.special import softmax
 from einops import rearrange
-<<<<<<< HEAD
-from torch.autograd import Variable
-=======
->>>>>>> bfaf5db4a8cbdff9615da1ec11227ac6f1d75ad7
 
 def cross_train_class_batch(model, s_samples, t_samples, target, criterion):
     outputs = model(s_samples, t_samples)
