@@ -1,0 +1,12 @@
+multinode_sh/
+result/
+debug/
+dataset/
+log/
+
+*.sh
+*.sw*
+*.txt
+*.out
+*.err
+*.multinode/
