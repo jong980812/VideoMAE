@@ -318,6 +318,8 @@ def main(args, ds_init):
         drop_block_rate=None,
         use_mean_pooling=args.use_mean_pooling,
         init_scale=args.init_scale,
+        cross_block_num=args.num_cross_blocks,
+        
     )
 
     patch_size = 14
