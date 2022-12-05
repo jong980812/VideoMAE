@@ -9,7 +9,10 @@ from timm.utils import accuracy, ModelEma
 import utils
 from scipy.special import softmax
 from einops import rearrange
+<<<<<<< HEAD
 from torch.autograd import Variable
+=======
+>>>>>>> bfaf5db4a8cbdff9615da1ec11227ac6f1d75ad7
 
 def cross_train_class_batch(model, s_samples, t_samples, target, criterion):
     outputs = model(s_samples, t_samples)
@@ -162,11 +165,9 @@ def validation_one_epoch(data_loader, model, clip_model, device):
         samples = samples.to(device, non_blocking=True)
         target = target.to(device, non_blocking=True)
         
-        s_samples = rearrange(samples, 'b c t h w -> (b t) c h w').to(device, non_blocking=True)
+        s_samples = samples[:, :, samples.shape[2] // 2, :, :].to(device, non_blocking=True) # pick center frame
         with torch.no_grad():
             s_samples = clip_model.encode_image(s_samples)
-        s_samples = rearrange(s_samples, '(b t) hidden_dim -> b t hidden_dim', b=batch_size)
-        s_samples = s_samples[:, 8, :].unsqueeze(dim=1) # using center frame
 
         # compute output
         with torch.cuda.amp.autocast():
@@ -208,11 +209,9 @@ def final_test(data_loader, model, clip_model, device, file):
         samples = samples.to(device, non_blocking=True)
         target = target.to(device, non_blocking=True)
         
-        s_samples = rearrange(samples, 'b c t h w -> (b t) c h w').to(device, non_blocking=True)
+        s_samples = samples[:, :, samples.shape[2] // 2, :, :].to(device, non_blocking=True) # pick center frame
         with torch.no_grad():
             s_samples = clip_model.encode_image(s_samples)
-        s_samples = rearrange(s_samples, '(b t) hidden_dim -> b t hidden_dim', b=batch_size)
-        s_samples = s_samples[:, 8, :].unsqueeze(dim=1) # using center frame
 
         # compute output
         with torch.cuda.amp.autocast():
