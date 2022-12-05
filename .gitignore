@@ -10,3 +10,4 @@ log/
 *.out
 *.err
 multinode/
+*.pyc
