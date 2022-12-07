@@ -12,3 +12,6 @@ log/
 multinode/
 *.pyc
 .vscode/
+*.pth
+dataset/
+result/
