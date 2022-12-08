@@ -187,7 +187,7 @@ class Block(nn.Module):
             self.adapter_norm = norm_layer(dim)
             self.adapter = Adapter(dim, down_ratio)
         
-        self.cross_norm = norm_layer(dim)
+        self.s2t_norm = norm_layer(dim)
         self.cross = CrossAttention(
             dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale,
             attn_drop=attn_drop, proj_drop=drop, attn_head_dim=attn_head_dim)
@@ -210,7 +210,7 @@ class Block(nn.Module):
             t_x = t_x + self.drop_path(self.attn(self.norm1(t_x)))
             if self.adapter != None:
                 t_x = t_x + self.drop_path(self.adapter(self.adapter_norm(t_x))) # for adapter layer
-            t_x = t_x + self.drop_path(self.cross(s_x, self.cross_norm(t_x)))
+            t_x = t_x + self.drop_path(self.cross(s_x, self.s2t_norm(t_x)))
             t_x = t_x + self.drop_path(self.mlp(self.norm2(t_x)))
         else: # 현재는 감마를 쓸 일이 없으니까 미구현상태로 둔다.
             t_x = t_x + self.drop_path(self.gamma_1 * self.attn(self.norm1(t_x)))
