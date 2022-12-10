@@ -96,12 +96,13 @@ def build_dataset(is_train, test_mode, args):
             mode = 'test'
             anno_path = os.path.join(args.data_path, 'test_mp4.csv')
         else:
-            mode = 'val'
+            mode = 'validation'
             anno_path = os.path.join(args.data_path, 'val_mp4.csv')
         
         if args.cross_attn is True:
             dataset = CrossSSVideoClsDataset(
                 anno_path=anno_path,
+                data_path='/',
                 mode = mode,
                 clip_len=1,
                 num_segment=args.num_frames,

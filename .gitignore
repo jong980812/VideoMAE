@@ -1,0 +1,13 @@
+/.vscode
+/dataset
+/multinode_sh
+/multinode
+/result
+/pretrained_weight
+__pycache__/
+
+*.out
+*.sh
+*.json
+*.pth
+*.sw*
