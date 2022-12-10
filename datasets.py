@@ -102,6 +102,7 @@ def build_dataset(is_train, test_mode, args):
         if args.cross_attn is True:
             dataset = CrossSSVideoClsDataset(
                 anno_path=anno_path,
+                data_path='/',
                 mode = mode,
                 clip_len=1,
                 num_segment=args.num_frames,
