@@ -16,7 +16,7 @@ import torch.nn as nn
 import torch.distributed as dist
 from torch._six import inf
 import random
-
+import requests
 from tensorboardX import SummaryWriter
 
 
@@ -575,7 +575,11 @@ def freeze_block(model,block_list):
             else:
                 param.requires_grad = True
     return model, freeze_list
-                
+def notice_message(token, channel, text, attachments):
+    attachments = json.dumps(attachments) # 리스트는 Json 으로 덤핑 시켜야 Slack한테 제대로 간다.
+    response = requests.post("https://slack.com/api/chat.postMessage",
+        headers={"Authorization": "Bearer "+token},
+        data={"channel": channel, "text": text ,"attachments": attachments})               
 def change_verification_mode(model, nb_classes):
     # freeze all parameters
     unfreeze_list = ['cross_block', 'fc_norm', 'head']

@@ -19,15 +19,13 @@ from optim_factory import create_optimizer, get_parameter_groups, LayerDecayValu
 
 from datasets import build_dataset
 from engine_for_crossattn import train_one_epoch, validation_one_epoch, final_test, merge
-from utils import NativeScalerWithGradNormCount as NativeScaler, freeze_block
+from utils import NativeScalerWithGradNormCount as NativeScaler, freeze_block, notice_message
 from utils import  cross_multiple_samples_collate
 import utils
 import modeling_finetune
 #add new code
 import modeling_crossattn
 import clip
-
-
 def get_args():
     parser = argparse.ArgumentParser('VideoMAE fine-tuning and evaluation script for video classification', add_help=False)
     parser.add_argument('--batch_size', default=64, type=int)
@@ -192,6 +190,7 @@ def get_args():
     #for pick freeze layers
     parser.add_argument('--freeze_block_names',nargs='+', type=str, default=None,
                         help='patch_embed, norm, attn, cross_norm, cross, mlp, fc_norm, head')
+
 
     known_args, _ = parser.parse_known_args()
 
@@ -571,10 +570,25 @@ def main(args, ds_init):
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     print('Training time {}'.format(total_time_str))
-
-
+    if global_rank == 0:
+        Token = 'xoxb-4494660617701-4500069866596-q1Su0mqI8pap4RpOHybJL0Lq' # 자신의 Token 입력
+        job_name=os.environ["SLURM_JOB_NAME"]
+        cluster=os.environ["SLURM_SUBMIT_HOST"]
+        job_time=total_time_str
+        attach_dict = {
+        'color' : '#ff0000',
+        'author_name' : 'Job Finish',
+        'title' : job_name,
+        'text' : cluster,
+        }
+        attach_list=[attach_dict] 
+        contents=f"Training time is {job_time}"
+        notice_message(Token, "#notice-job", contents, attach_list)
 if __name__ == '__main__':
     opts, ds_init = get_args()
     if opts.output_dir:
         Path(opts.output_dir).mkdir(parents=True, exist_ok=True)
     main(opts, ds_init)
+    
+    
+    
