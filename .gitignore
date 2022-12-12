@@ -12,3 +12,4 @@ log/
 multinode/
 *.pyc
 .vscode/
+toycheck.ipynb
