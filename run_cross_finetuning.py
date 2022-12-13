@@ -571,7 +571,7 @@ def main(args, ds_init):
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     print('Training time {}'.format(total_time_str))
     if global_rank == 0:
-        Token = 'xoxb-4494660617701-4500069866596-q1Su0mqI8pap4RpOHybJL0Lq' # 자신의 Token 입력
+        Token = 'xoxb-4494660617701-4500069866596-sljsWS4y0gBgtBC4BG2tqtdx' # 자신의 Token 입력
         job_name=os.environ["SLURM_JOB_NAME"]
         cluster=os.environ["SLURM_SUBMIT_HOST"]
         job_time=total_time_str
