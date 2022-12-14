@@ -190,7 +190,7 @@ def get_args():
     #for pick freeze layers
     parser.add_argument('--freeze_block_names',nargs='+', type=str, default=None,
                         help='patch_embed, norm, attn, cross_norm, cross, mlp, fc_norm, head')
-
+    parser.add_argument('--slack_api', type=str,default=None)
 
     known_args, _ = parser.parse_known_args()
 
@@ -570,8 +570,8 @@ def main(args, ds_init):
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     print('Training time {}'.format(total_time_str))
-    if global_rank == 0:
-        Token = 'xoxb-4494660617701-4500069866596-sljsWS4y0gBgtBC4BG2tqtdx' # 자신의 Token 입력
+    if global_rank == 0 and args.slack_api:
+        Token = args.slack_api # 자신의 Token 입력
         job_name=os.environ["SLURM_JOB_NAME"]
         cluster=os.environ["SLURM_SUBMIT_HOST"]
         job_time=total_time_str
