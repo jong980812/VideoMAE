@@ -3,7 +3,7 @@ result/
 debug/
 dataset/
 log/
-
+debug/
 *.sh
 *.sw*
 *.txt
