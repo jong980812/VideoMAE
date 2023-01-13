@@ -19,7 +19,7 @@ from optim_factory import create_optimizer, get_parameter_groups, LayerDecayValu
 
 from datasets import build_dataset
 from engine_for_crossattn import train_one_epoch, validation_one_epoch, final_test, merge
-from utils import NativeScalerWithGradNormCount as NativeScaler, laod_pretrained_weight, change_verification_mode, freeze_stlayers
+from utils import NativeScalerWithGradNormCount as NativeScaler, laod_pretrained_weight, change_verification_mode, freeze_stlayers, reshape_transform
 from utils import cross_multiple_samples_collate
 import utils
 import clip_base.clip as clip
@@ -187,6 +187,12 @@ def get_args():
 
     parser.add_argument('--enable_deepspeed', action='store_true', default=False)
     parser.add_argument('--freeze_layers', action='store_true', default=False)
+    parser.add_argument('--grad_cam', action='store_true', default=False)
+    parser.add_argument('--grad_cam_method', type=str, default="gradcam")
+    parser.add_argument('--grad_cam_img', type=str)
+    parser.add_argument('--grad_cam_eigen_smooth',action='store_true')
+    parser.add_argument('--grad_cam_aug_smooth', action='store_true')
+    
 
     known_args, _ = parser.parse_known_args()
 
@@ -395,7 +401,58 @@ def main(args, ds_init):
         args=args, model=model, model_without_ddp=model_without_ddp,
         optimizer=optimizer, loss_scaler=loss_scaler, model_ema=model_ema)
     
+    if args.grad_cam:
+        from pytorch_grad_cam import GradCAM, \
+        ScoreCAM, \
+        GradCAMPlusPlus, \
+        AblationCAM, \
+        XGradCAM, \
+        EigenCAM, \
+        EigenGradCAM, \
+        LayerCAM, \
+        FullGrad
+        from pytorch_grad_cam.utils.image import show_cam_on_image, \
+        preprocess_image
+        from pytorch_grad_cam.ablation_layer import AblationLayerVit
+        import cv2
+        from torchvision.utils import save_image
+        
+        methods = \
+        {"gradcam": GradCAM,
+         "scorecam": ScoreCAM,
+         "gradcam++": GradCAMPlusPlus,
+         "ablationcam": AblationCAM,
+         "xgradcam": XGradCAM,
+         "eigencam": EigenCAM,
+         "eigengradcam": EigenGradCAM,
+         "layercam": LayerCAM,
+         "fullgrad": FullGrad}
+        model.eval()
+        model.cuda()
+        
+        target_layers = [model.module.visual.transformer.resblocks[-1].ln_1]
+        cam = methods[args.grad_cam_method](model=model,
+                                    target_layers=target_layers,
+                                    use_cuda=True,
+                                    reshape_transform=reshape_transform)
+        rgb_img = cv2.imread(args.grad_cam_img, 1)[:, :, ::-1]
+        rgb_img = cv2.resize(rgb_img, (224, 224))
+        rgb_img = np.float32(rgb_img) / 255
+        input_tensor = preprocess_image(rgb_img, mean=[0.5, 0.5, 0.5],
+                                        std=[0.5, 0.5, 0.5])
+        targets = None
+        cam.batch_size = 32
+        grayscale_cam = cam(input_tensor=input_tensor.half(),
+                    targets=targets,
+                    eigen_smooth=args.grad_cam_eigen_smooth,
+                    aug_smooth=args.grad_cam_aug_smooth)
 
+        # Here grayscale_cam has only one image in the batch
+        grayscale_cam = grayscale_cam[0, :]
+
+        cam_image = show_cam_on_image(rgb_img, grayscale_cam)
+        cv2.imwrite('late_fusion_cam.jpg', cam_image)
+        exit(0)
     if args.eval:
         preds_file = os.path.join(args.output_dir, str(global_rank) + '.txt')
         test_stats = final_test(data_loader_test, model, device, preds_file)

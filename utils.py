@@ -631,7 +631,15 @@ def freeze_stlayers(model):
                 param.requires_grad = False
     print(temp_list)
     return model
-                
+def reshape_transform(tensor, height=14, width=14):
+    tensor=tensor.transpose(0,1)
+    result = tensor[:, 1:, :].reshape(tensor.size(0),
+                                      height, width, tensor.size(2))
+
+    # Bring the channels to the first dimension,
+    # like in CNNs.
+    result = result.transpose(2, 3).transpose(1, 2)
+    return result            
 def change_verification_mode(model, nb_classes):
     # freeze all parameters
     unfreeze_list = ['cross_block', 'fc_norm', 'head']
