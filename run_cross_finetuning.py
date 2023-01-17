@@ -314,7 +314,59 @@ def main(args, ds_init):
     
     model, _ = clip.load('/data/kide004/repos/VideoMAE/pre-trained/ViT-B-16.pt',device='cuda')
     
-    
+    if args.grad_cam:
+        model.eval()
+        from pytorch_grad_cam import GradCAM, \
+        ScoreCAM, \
+        GradCAMPlusPlus, \
+        AblationCAM, \
+        XGradCAM, \
+        EigenCAM, \
+        EigenGradCAM, \
+        LayerCAM, \
+        FullGrad
+        from pytorch_grad_cam.utils.image import show_cam_on_image, \
+        preprocess_image
+        from pytorch_grad_cam.ablation_layer import AblationLayerVit
+        import cv2
+        from torchvision.utils import save_image
+        
+        methods = \
+        {"gradcam": GradCAM,
+         "scorecam": ScoreCAM,
+         "gradcam++": GradCAMPlusPlus,
+         "ablationcam": AblationCAM,
+         "xgradcam": XGradCAM,
+         "eigencam": EigenCAM,
+         "eigengradcam": EigenGradCAM,
+         "layercam": LayerCAM,
+         "fullgrad": FullGrad}
+        model.eval()
+        model.cuda()
+        
+        target_layers = [model.visual.transformer.resblocks[-1].ln_1]
+        cam = methods[args.grad_cam_method](model=model,
+                                    target_layers=target_layers,
+                                    use_cuda=True,
+                                    reshape_transform=reshape_transform)
+        rgb_img = cv2.imread(args.grad_cam_img, 1)[:, :, ::-1]
+        rgb_img = cv2.resize(rgb_img, (224, 224))
+        rgb_img = np.float32(rgb_img) / 255
+        input_tensor = preprocess_image(rgb_img, mean=[0.5, 0.5, 0.5],
+                                        std=[0.5, 0.5, 0.5])
+        targets = None
+        cam.batch_size = 32
+        grayscale_cam = cam(input_tensor=input_tensor,
+                    targets=targets,
+                    eigen_smooth=args.grad_cam_eigen_smooth,
+                    aug_smooth=args.grad_cam_aug_smooth)
+
+        # Here grayscale_cam has only one image in the batch
+        grayscale_cam = grayscale_cam[0, :]
+
+        cam_image = show_cam_on_image(rgb_img, grayscale_cam)
+        cv2.imwrite('late_fusion_cam.jpg', cam_image)
+        exit(0)
     model_ema = None
     if args.model_ema:
         model_ema = ModelEma(
@@ -401,58 +453,7 @@ def main(args, ds_init):
         args=args, model=model, model_without_ddp=model_without_ddp,
         optimizer=optimizer, loss_scaler=loss_scaler, model_ema=model_ema)
     
-    if args.grad_cam:
-        from pytorch_grad_cam import GradCAM, \
-        ScoreCAM, \
-        GradCAMPlusPlus, \
-        AblationCAM, \
-        XGradCAM, \
-        EigenCAM, \
-        EigenGradCAM, \
-        LayerCAM, \
-        FullGrad
-        from pytorch_grad_cam.utils.image import show_cam_on_image, \
-        preprocess_image
-        from pytorch_grad_cam.ablation_layer import AblationLayerVit
-        import cv2
-        from torchvision.utils import save_image
-        
-        methods = \
-        {"gradcam": GradCAM,
-         "scorecam": ScoreCAM,
-         "gradcam++": GradCAMPlusPlus,
-         "ablationcam": AblationCAM,
-         "xgradcam": XGradCAM,
-         "eigencam": EigenCAM,
-         "eigengradcam": EigenGradCAM,
-         "layercam": LayerCAM,
-         "fullgrad": FullGrad}
-        model.eval()
-        model.cuda()
-        
-        target_layers = [model.module.visual.transformer.resblocks[-1].ln_1]
-        cam = methods[args.grad_cam_method](model=model,
-                                    target_layers=target_layers,
-                                    use_cuda=True,
-                                    reshape_transform=reshape_transform)
-        rgb_img = cv2.imread(args.grad_cam_img, 1)[:, :, ::-1]
-        rgb_img = cv2.resize(rgb_img, (224, 224))
-        rgb_img = np.float32(rgb_img) / 255
-        input_tensor = preprocess_image(rgb_img, mean=[0.5, 0.5, 0.5],
-                                        std=[0.5, 0.5, 0.5])
-        targets = None
-        cam.batch_size = 32
-        grayscale_cam = cam(input_tensor=input_tensor.half(),
-                    targets=targets,
-                    eigen_smooth=args.grad_cam_eigen_smooth,
-                    aug_smooth=args.grad_cam_aug_smooth)
-
-        # Here grayscale_cam has only one image in the batch
-        grayscale_cam = grayscale_cam[0, :]
-
-        cam_image = show_cam_on_image(rgb_img, grayscale_cam)
-        cv2.imwrite('late_fusion_cam.jpg', cam_image)
-        exit(0)
+    
     if args.eval:
         preds_file = os.path.join(args.output_dir, str(global_rank) + '.txt')
         test_stats = final_test(data_loader_test, model, device, preds_file)
