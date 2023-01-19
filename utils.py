@@ -354,9 +354,7 @@ def laod_pretrained_weight(model, pre_trained_weight, args):
         checkpoint_model = checkpoint
     state_dict = model.state_dict()
     for k in ['head.weight', 'head.bias']:
-        if k in checkpoint_model and checkpoint_model[k].shape != state_dict[k].shape:
-            print(f"Removing key {k} from pretrained checkpoint")
-            del checkpoint_model[k]
+        del checkpoint_model[k]
     all_keys = list(checkpoint_model.keys())
     new_dict = OrderedDict()
     for key in all_keys:

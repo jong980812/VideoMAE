@@ -314,7 +314,7 @@ def main(args, ds_init):
         drop_path_rate=args.drop_path,
         attn_drop_rate=args.attn_drop_rate,
         drop_block_rate=None,
-        use_mean_pooling=False,
+        use_mean_pooling=True,
         init_scale=args.init_scale,
     )
 

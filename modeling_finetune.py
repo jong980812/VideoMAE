@@ -268,10 +268,11 @@ class VisionTransformer(nn.Module):
 
         x = self.norm(x)
         
-        x = rearrange(x, 'b (t p) d -> b t p d', t=8)
+        # x = rearrange(x, 'b (t p) d -> b t p d', t=8)
         
-        return x.mean(dim=2)
-        
+        # return x.mean(dim=2)
+        if self.fc_norm is not None:
+            return self.fc_norm(x)
         #mean pooling 관련 코드
         # if self.fc_norm is not None:
         #     return self.fc_norm(x.mean(1))
