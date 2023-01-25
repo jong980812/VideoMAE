@@ -176,7 +176,21 @@ def build_dataset(is_train, test_mode, args):
             new_width=320,
             args=args)
         nb_classes = 300
-
+    elif args.data_set == "EGO4D_LTA":
+        mode = None
+        anno_path = None
+        if is_train : 
+            mode = 'train'
+            anno_path = os.path.join(args.anno_path,'lta_train.csv')
+        elif test_mode:
+            mode = 'test'
+            anno_path = os.path.join(args.anno_path, 'lta_val.csv') #! Test is not annotated.
+        else:
+            mode = 'validation'
+            anno_path = os.path.join(args.anno_path, 'lta_val.csv')
+        dataset = None
+        nb_classes = 478 if args.EGO_task == "noun" else 115
+        
     elif args.data_set == 'UCF101':
         mode = None
         anno_path = None
