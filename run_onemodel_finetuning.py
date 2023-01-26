@@ -19,7 +19,7 @@ from util_tools.optim_factory import create_optimizer, get_parameter_groups, Lay
 
 from dataset.datasets import build_dataset
 from engine_for_onemodel import train_one_epoch, validation_one_epoch, final_test, merge
-from util_tools.utils import NativeScalerWithGradNormCount as NativeScaler, laod_pretrained_weight, freeze_block
+from util_tools.utils import NativeScalerWithGradNormCount as NativeScaler, laod_vmae_weights, load_clip_weights, freeze_block
 from util_tools.utils import cross_multiple_samples_collate, notice_message
 import util_tools.utils as utils
 import clip_models.clip as clip
@@ -37,6 +37,8 @@ def get_args():
     parser.add_argument('--vmae_model', default='vit_base_patch16_224', type=str, metavar='MODEL',
                         help='Name of model to train')
     parser.add_argument('--clip_model', default='clip', choices=['clip', 't2s','conv'], type=str, help='pick clip version')
+    parser.add_argument('--clip_frame', default=None, choices=['center', 'all'], type=str, help='pick clip frame number')
+    parser.add_argument('--cls_split', default=False, type=bool, help='using cls token split')
     parser.add_argument('--tubelet_size', type=int, default= 2)
     parser.add_argument('--input_size', default=224, type=int,
                         help='videos input size')
@@ -150,6 +152,7 @@ def get_args():
     parser.add_argument('--sampling_rate', type=int, default= 4)
     parser.add_argument('--data_set', default='Kinetics-400', choices=['Kinetics-400', 'SSV2','MINI_SSV2', 'UCF101', 'HMDB51','image_folder', 'EPIC', 'EGO4D_LTA'],
                         type=str, help='dataset')
+    parser.add_argument('--pred_type', default=None, choices=['noun', 'verb', 'action'])
     parser.add_argument('--output_dir', default='',
                         help='path where to save, empty for no saving')
     parser.add_argument('--log_dir', default=None,
@@ -311,8 +314,12 @@ def main(args, ds_init):
     args.window_size = 16
     args.patch_size = patch_size
     
+    
     model = clip.load(args.clip_finetune, args, device='cuda')
-    model, freeze_list = freeze_block(model, ['attn','ln_1','mlp','ln_2'])
+    # model, freeze_list = freeze_block(model, ['attn','ln_1','mlp','ln_2'])
+    
+    
+    
     
     
     model_ema = None
@@ -428,7 +435,7 @@ def main(args, ds_init):
         if log_writer is not None:
             log_writer.set_step(epoch * num_training_steps_per_epoch * args.update_freq)
         train_stats = train_one_epoch(
-            model, criterion, data_loader_train, optimizer,
+            args, model, criterion, data_loader_train, optimizer,
             device, epoch, loss_scaler, args.clip_grad, model_ema, mixup_fn,
             log_writer=log_writer, start_steps=epoch * num_training_steps_per_epoch,
             lr_schedule_values=lr_schedule_values, wd_schedule_values=wd_schedule_values,
@@ -440,7 +447,7 @@ def main(args, ds_init):
                     args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
                     loss_scaler=loss_scaler, epoch=epoch, model_ema=model_ema)
         if data_loader_val is not None:
-            test_stats = validation_one_epoch(data_loader_val, model, device)
+            test_stats = validation_one_epoch(args, data_loader_val, model, device)
             print(f"Accuracy of the network on the {len(dataset_val)} val videos: {test_stats['acc1']:.1f}%")
             if max_accuracy < test_stats["acc1"]:
                 max_accuracy = test_stats["acc1"]
@@ -470,7 +477,7 @@ def main(args, ds_init):
                 f.write(json.dumps(log_stats) + "\n")
 
     preds_file = os.path.join(args.output_dir, str(global_rank) + '.txt')
-    test_stats = final_test(data_loader_test, model, device, preds_file)
+    test_stats = final_test(args, data_loader_test, model, device, preds_file)
     torch.distributed.barrier()
     if global_rank == 0:
         print("Start merging results...")
@@ -499,7 +506,7 @@ def main(args, ds_init):
             'text' : cluster,
             }
             attach_list=[attach_dict] 
-            contents=f"Training time is {job_time}\nFreeze Layer: {args.freeze_block_names}\nTop 1 Accuracy is {final_top1}"
+            contents=f"Training time is {job_time}\n Top 1 Accuracy is {final_top1}"
             notice_message(Token, "#notice-job", contents, attach_list)
     
 
