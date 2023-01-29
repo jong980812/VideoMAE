@@ -652,3 +652,9 @@ def change_verification_mode(model, nb_classes):
     trunc_normal_(model.head.weight, std=.02)
     nn.init.constant_(model.head.bias, 0)
     
+def notice_message(token, channel, text, attachments):
+    attachments = json.dumps(attachments) # 리스트는 Json 으로 덤핑 시켜야 Slack한테 제대로 간다.
+    response = requests.post("https://slack.com/api/chat.postMessage",
+        headers={"Authorization": "Bearer "+token},
+        data={"channel": channel, "text": text ,"attachments": attachments})
+    
