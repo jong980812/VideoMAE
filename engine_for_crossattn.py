@@ -59,7 +59,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
         if mixup_fn is not None:
             samples, targets = mixup_fn(samples, targets)
 
-        center_frame = samples[:, :, samples.shape[2] // 2, :, :].to(device, non_blocking=True)
+        center_frame = samples#samples[:, :, samples.shape[2] // 2, :, :].to(device, non_blocking=True)
         samples = samples.half()
         
         if loss_scaler is None:
