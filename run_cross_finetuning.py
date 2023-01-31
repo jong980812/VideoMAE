@@ -309,7 +309,7 @@ def main(args, ds_init):
     args.window_size = 16
     args.patch_size = patch_size
     
-    model, _ = clip.load('/data/kide004/repos/VideoMAE/pre-trained/ViT-B-16.pt',device='cuda')
+    model, _ = clip.load('/data/datasets/Epickitchens100_clips/ViT-B-16.pt',device='cuda')
     
     
     model_ema = None
