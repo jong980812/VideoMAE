@@ -22,7 +22,7 @@ from util_tools.utils import NativeScalerWithGradNormCount as NativeScaler, load
 from util_tools.utils import multiple_samples_collate, notice_message, laod_eval_weights
 import util_tools.utils as utils
 import videomae_models.bidir_modeling_crossattn
-
+import videomae_models.mae_finetune
 
 def get_args():
     parser = argparse.ArgumentParser('VideoMAE fine-tuning and evaluation script for video classification', add_help=False)
@@ -195,6 +195,9 @@ def get_args():
     parser.add_argument('--slack_api', type=str,default=None)
     parser.add_argument('--composition', action='store_true')
     
+    
+    
+    
 
     known_args, _ = parser.parse_known_args()
 
@@ -335,8 +338,8 @@ def main(args, ds_init):
         load_bidir_weights(model, args)
     
     ###### VMAE 검증을 위해 freeze는 잠시 꺼둔다 #############
-    model, unfreeze_list = unfreeze_block(model, ['cross', 'clip_temporal_embedding', 'space_time_pos', 'sapce_pos', 'Adapter', 'ln_post', 'vmae_fc_norm','last_proj','head'])
-    print('unfreeze list :', unfreeze_list)
+    # model, unfreeze_list = unfreeze_block(model, ['cross', 'clip_temporal_embedding', 'space_time_pos', 'sapce_pos', 'Adapter', 'ln_post', 'vmae_fc_norm','last_proj','head'])
+    # print('unfreeze list :', unfreeze_list)
     
     model.to(device)
     

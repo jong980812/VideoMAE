@@ -275,7 +275,7 @@ class CrossAttentionT2S(nn.Module): # 이게 VMAE로 치면 blocks class다. 여
 class Block(nn.Module):
 
     def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, qk_scale=None, drop=0., attn_drop=0.,
-                 drop_path=0., init_values=None, num_layer=0, act_layer=nn.GELU, norm_layer=nn.LayerNorm, attn_head_dim=None):
+                 drop_path=0., init_values=None, num_layer=0, act_layer=nn.GELU, norm_layer=nn.LayerNorm, attn_head_dim=None,use_adapter=False):
         super().__init__()
         self.cross = None
         self.num_layer = num_layer
@@ -283,56 +283,19 @@ class Block(nn.Module):
         self.scale = 0.5
         mlp_hidden_dim = int(dim * mlp_ratio)
         self.act = act_layer()
-        
-        ###################################### MHSA code #####################################
-        ############################ AIM MHSA ###########################
-        # self.clip_ln_1 = LayerNorm(dim)
-        # self.clip_attn = nn.MultiheadAttention(dim, num_heads)
-        # self.S_Adapter = Adapter(dim)
-        ##################################################################
-        
+        self.use_adapter=use_adapter
         ############################ VMAE MHSA ###########################
         self.norm1 = norm_layer(dim)
         self.attn = Attention(
             dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale,
             attn_drop=attn_drop, proj_drop=drop, attn_head_dim=attn_head_dim)
-        self.T_Adapters = nn.ModuleList([
-            Adapter(dim=384,mlp_ratio=0.5,skip_connect=True) for i in range(2)
-        ])
-        self.fusion_adapter=nn.Linear(768,dim)
-        # self.T_Adapter = Adapter(dim, skip_connect=True)# base line 의 경우 True.
-        ##################################################################
-        #########################################################################################
-        
-        #?##################################### Cross attention ####################################
-        # self.cross_s_down = nn.Linear(dim, dim//2)
-        # self.cross_t_down = nn.Linear(dim, dim//2)
-        # self.ln_s_cross = norm_layer(dim//2)
-        # self.ln_t_cross = norm_layer(dim//2)
-        # self.t2s_cross = CrossAttentionT2S(dim//2, n_head=num_heads)
-        # self.s2t_cross = CrossAttentionS2T(dim//2, n_head=num_heads)
-        # self.cross_s_up = nn.Linear(dim//2, dim)
-        # self.cross_t_up = nn.Linear(dim//2, dim)
-        # self.cross_t2s_Adapter = Adapter(dim, skip_connect=False)
-        # self.cross_s2t_Adapter = Adapter(dim, skip_connect=False)
-        #?##########################################################################################
-        
-        #!##################################### FFN code #########################################
-        ############################ AIM FFN ###############################
-        # self.clip_ln_2 = LayerNorm(dim)
-        # self.clip_mlp = nn.Sequential(OrderedDict([
-        #     ("c_fc", nn.Linear(dim, dim * 4)),
-        #     ("gelu", QuickGELU()),
-        #     ("c_proj", nn.Linear(dim * 4, dim))
-        # ]))
-        # self.S_MLP_Adapter = Adapter(dim, skip_connect=False)
-        # self.attn_mask = None
-        #!####################################################################
-        
-        #@########################### VMAE FFN ###############################
+        if self.use_adapter:
+            self.T_Adapter = Adapter(dim, skip_connect=True)# base line 의 경우 True.
+        ############################ VMAE FFN ###############################
         self.norm2 = norm_layer(dim)
         self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
-        self.T_MLP_Adapter = Adapter(dim, skip_connect=False)
+        if self.use_adapter:
+            self.T_MLP_Adapter = Adapter(dim, skip_connect=False)
         #######################################################################
         #########################################################################################
         
@@ -344,55 +307,16 @@ class Block(nn.Module):
         return self.clip_attn(x, x, x, need_weights=False, attn_mask=self.attn_mask)[0]
 
     def forward(self,t_x):
-        B = t_x.shape[0]
-        # n, bt, _ = s_x.shape
-        # num_frames = bt//B
+        B = t_x.shape[0]     
+        if self.use_adapter:
+            t_x = t_x + self.T_Adapter(self.attn(self.norm1(t_x)))
+            t_xn = self.norm2(t_x)
+            t_x = t_x + self.mlp(t_xn) + self.drop_path(self.scale * self.T_MLP_Adapter(t_xn))
+        else:
+            t_x = t_x + self.drop_path(self.attn(self.norm1(t_x)))
+            t_x = t_x + self.drop_path(self.mlp(self.norm2(t_x)))
         
-        ############################ MHSA Forward #############################
-        # AIM Space MHSA
-        # s_x = s_x + self.S_Adapter(self.attention(self.clip_ln_1(s_x))) # original space multi head self attention
-        # VMAE Time MHSA
-        # t_x = t_x + self.T_Adapters(self.attn(self.norm1(t_x)))
-        #s_x = rearrange(s_x, '(b t) n d -> b t n d', b=B)
-        t_x=self.attn(self.norm1(t_x))
-        # Multihead Adapter
-        t_x_adapters=rearrange(t_x, 'b n (h d) -> b n h d',b=B,h=2)
-        for i in range(2):
-            t_x_adapters[:,:,i,:]=self.T_Adapters[i](t_x_adapters[:,:,i,:])
-        t_x_adapters=rearrange(t_x_adapters, 'b n h d -> b n (h d)',h=2)
-        t_x_adapters=self.fusion_adapter(t_x_adapters)
-        t_x=t_x+t_x_adapters
-        
-        
-        
-        
-        # VMAE original Path
-        # t_x = t_x + self.attn(self.norm1(t_x)) 
-        ########################################################################
-        
-        ############################ Cross Forward #############################
-        # n_s_x = self.ln_s_cross(self.cross_s_down(s_x))
-        # n_t_x = self.ln_t_cross(self.cross_t_down(t_x))
-        # # c_s_x = self.cross_s_up(self.act(self.t2s_cross(n_s_x, n_t_x)))
-        # # c_t_x = self.cross_t_up(self.act(self.s2t_cross(c_s_x, n_t_x)))
-        # c_t_x = self.s2t_cross(n_s_x, n_t_x)
-        # c_s_x = self.t2s_cross(n_s_x, c_t_x)
-        # c_s_x = self.cross_s_up(self.act(c_s_x))
-        # c_t_x = self.cross_t_up(self.act(c_t_x))
-        # s_x = s_x + self.drop_path(c_s_x)
-        # t_x = t_x + self.drop_path(c_t_x)
-        #########################################################################
-        
-        ############################ FFN Forward ##################################
-        # s_xn = self.clip_ln_2(s_x)
-        # s_x = s_x + self.clip_mlp(s_xn) + self.drop_path(self.scale * self.S_MLP_Adapter(s_xn))
-        
-        t_xn = self.norm2(t_x)
-        t_x = t_x + self.mlp(t_xn) + self.drop_path(self.scale * self.T_MLP_Adapter(t_xn))
-        
-        ##VMAE _original path
-        # t_x = t_x + self.drop_path(self.mlp(t_xn))
-        
+
         ############################################################################
         
         return t_x
@@ -422,7 +346,9 @@ class STCrossTransformer(nn.Module):
                  tubelet_size=2,
                  use_mean_pooling=True,
                  composition=False,
-                 pretrained_cfg = None):
+                 pretrained_cfg = None,
+                 use_adapter=False,
+                 ):
         super().__init__()
         self.num_classes = num_classes
         self.embed_dim = embed_dim  # num_features for consistency with other models
@@ -431,13 +357,8 @@ class STCrossTransformer(nn.Module):
         self.patch_embed = PatchEmbed(
             img_size=img_size, patch_size=patch_size, in_chans=in_chans, embed_dim=embed_dim, num_frames=all_frames, tubelet_size=self.tubelet_size)
         num_patches = self.patch_embed.num_patches
-        
+        self.use_adapter=use_adapter
         scale = embed_dim ** -0.5
-        # self.clip_conv1 = nn.Conv2d(in_channels=3, out_channels=embed_dim, kernel_size=patch_size, stride=patch_size, bias=False)
-        # self.clip_class_embedding = nn.Parameter(scale * torch.randn(embed_dim))
-        # self.clip_positional_embedding = nn.Parameter(scale * torch.randn((img_size // patch_size) ** 2 + 1, embed_dim))
-        # self.clip_temporal_embedding = nn.Parameter(torch.zeros(1, 8, embed_dim))
-        # self.clip_ln_pre = LayerNorm(embed_dim)
 
         if use_learnable_pos_emb:
             self.pos_embed = nn.Parameter(torch.zeros(1, num_patches, embed_dim))
@@ -453,7 +374,7 @@ class STCrossTransformer(nn.Module):
             Block(
                 dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
                 drop=drop_rate, attn_drop=attn_drop_rate, drop_path=dpr[i], norm_layer=norm_layer,
-                init_values=init_values, num_layer=i)
+                init_values=init_values, num_layer=i,use_adapter=self.use_adapter)
             for i in range(depth)])
         
         # self.clip_ln_post = LayerNorm(embed_dim)
@@ -470,7 +391,8 @@ class STCrossTransformer(nn.Module):
             trunc_normal_(self.pos_embed, std=.02)
 
         self.apply(self._init_weights)
-        # self._init_adpater_weight()
+        if self.use_adapter:
+            self._init_adpater_weight()
         
         if self.composition:
             trunc_normal_(self.head_noun.weight, std=.02)
@@ -527,22 +449,6 @@ class STCrossTransformer(nn.Module):
 
     def forward_features(self, x):
         B = x.shape[0]
-        # s_x = x[:, :, 1::2, :, :] # pick even frames (8 frame)
-        # ######################## AIM spatial path #########################
-        # s_t = s_x.shape[2]
-        # s_x = rearrange(s_x, 'b c t h w -> (b t) c h w')
-        # s_x = self.clip_conv1(s_x) # shape = [*, embeddim, grid, grid]
-        # s_x = s_x.reshape(s_x.shape[0], s_x.shape[1], -1) # [*, embeddim, grid**2]
-        # s_x = s_x.permute(0, 2, 1) # shape[batch, patchnum, embeddim]
-        # s_x = torch.cat([self.clip_class_embedding.to(s_x.dtype) + torch.zeros(s_x.shape[0], 1, s_x.shape[-1], dtype=s_x.dtype, device=s_x.device), s_x], dim=1)
-        # s_x = s_x + self.clip_positional_embedding.to(s_x.dtype)
-        # n = s_x.shape[1]
-        # s_x = rearrange(s_x, '(b t) n d -> (b n) t d', t=s_t)∞∞
-        # s_x = s_x + self.clip_temporal_embedding
-        # s_x = rearrange(s_x, '(b n) t d -> (b t) n d', n=n)
-        # s_x = self.clip_ln_pre(s_x)
-        #####################################################################
-        
         ######################## VMAE spatial path #########################
         t_x = self.patch_embed(x)
 
@@ -551,23 +457,19 @@ class STCrossTransformer(nn.Module):
         t_x = self.pos_drop(t_x)
         #####################################################################
         
-        # s_x = s_x.permute(1,0,2)
         for blk in self.blocks:
             t_x = blk(t_x)
-        # s_x = s_x.permute(1,0,2)
-        
-        # s_x = rearrange(s_x, '(b t) n d -> b t n d', b=B)
-        # s_x = self.clip_ln_post(s_x[:,:,0,:].mean(1)) # all cls tokens avg pooling
         t_x = self.vmae_fc_norm(t_x.mean(1)) # all patch avg pooling
         
-        return t_x#s_x, t_x
+        return t_x
 
 
     def forward(self, x):
         if self.composition:
             t_x = self.forward_features(x)
-            s_x = self.head_noun(t_x);t_x = self.head_verb(t_x)
-            return s_x, t_x
+            noun = self.head_noun(t_x)
+            verb = self.head_verb(t_x)
+            return noun, verb
         else:
             x = self.forward_features(x)
             x = self.head(x)
@@ -576,27 +478,36 @@ class STCrossTransformer(nn.Module):
 
 
 @register_model
-def bidir_vit_base_patch16_224(pretrained=False, **kwargs):
+def vit_base_patch16_224(pretrained=False, **kwargs):
     model = STCrossTransformer(
         patch_size=16, embed_dim=768, depth=12, num_heads=12, mlp_ratio=4, qkv_bias=True,
-        norm_layer=partial(nn.LayerNorm, eps=1e-6), composition=False, **kwargs)
+        norm_layer=partial(nn.LayerNorm, eps=1e-6), composition=False,use_adapter=False, **kwargs)
+    #model.default_cfg = _cfg()
+    return model
+@register_model
+def compo_vit_base_patch16_224(pretrained=False, **kwargs):
+    model = STCrossTransformer(
+        patch_size=16, embed_dim=768, depth=12, num_heads=12, mlp_ratio=4, qkv_bias=True,
+        norm_layer=partial(nn.LayerNorm, eps=1e-6), composition=True,use_adapter=False, **kwargs)
     #model.default_cfg = _cfg()
     return model
 
+
 @register_model
-def bidir_25811_vit_base_patch16_224(pretrained=False, **kwargs):
+def adapter_vit_base_patch16_224(pretrained=False, **kwargs):
     model = STCrossTransformer(
         patch_size=16, embed_dim=768, depth=12, num_heads=12, mlp_ratio=4, qkv_bias=True,
-        norm_layer=partial(nn.LayerNorm, eps=1e-6), reduce_position=[2, 5, 8, 11], **kwargs)
+        norm_layer=partial(nn.LayerNorm, eps=1e-6), composition=False,use_adapter=True, **kwargs)
+    #model.default_cfg = _cfg()
+    return model
+@register_model
+def compo_adapter_vit_base_patch16_224(pretrained=False, **kwargs):
+    model = STCrossTransformer(
+        patch_size=16, embed_dim=768, depth=12, num_heads=12, mlp_ratio=4, qkv_bias=True,
+        norm_layer=partial(nn.LayerNorm, eps=1e-6), composition=True,use_adapter=True, **kwargs)
     #model.default_cfg = _cfg()
     return model
 
-@register_model
-def compo_bidir_vit_base_patch16_224(pretrained=False, **kwargs):
-    model = STCrossTransformer(
-        patch_size=16, embed_dim=768, depth=12, num_heads=12, mlp_ratio=4, qkv_bias=True,
-        norm_layer=partial(nn.LayerNorm, eps=1e-6), composition=True, **kwargs)
-    #model.default_cfg = _cfg()
-    return model
+
 
 
