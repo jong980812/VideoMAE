@@ -23,6 +23,7 @@ from util_tools.utils import multiple_samples_collate, notice_message, laod_eval
 import util_tools.utils as utils
 import videomae_models.bidir_modeling_crossattn
 import videomae_models.mae_finetune
+import videomae_models.AIM_finetune
 
 def get_args():
     parser = argparse.ArgumentParser('VideoMAE fine-tuning and evaluation script for video classification', add_help=False)
@@ -192,6 +193,7 @@ def get_args():
     parser.add_argument('--enable_deepspeed', action='store_true', default=False)
     # new settings
     parser.add_argument('--freeze_layers', default=None, nargs='+', type=str)
+    parser.add_argument('--unfreeze_layers', default=None, nargs='+', type=str)
     parser.add_argument('--slack_api', type=str,default=None)
     parser.add_argument('--composition', action='store_true')
     
@@ -338,8 +340,17 @@ def main(args, ds_init):
         load_bidir_weights(model, args)
     
     ###### VMAE 검증을 위해 freeze는 잠시 꺼둔다 #############
-    # model, unfreeze_list = unfreeze_block(model, ['cross', 'clip_temporal_embedding', 'space_time_pos', 'sapce_pos', 'Adapter', 'ln_post', 'vmae_fc_norm','last_proj','head'])
-    # print('unfreeze list :', unfreeze_list)
+    if args.unfreeze_layers is not None:
+        model, unfreeze_list = unfreeze_block(model,args.unfreeze_layers)
+        print('unfreeze list :', unfreeze_list)
+    if model.use_adapter and 'aim' in args.vmae_model:
+        with torch.no_grad():#! module_layers에 들어가는 것만 한다. 
+            for i in range(12):
+                model.blocks[i].time_attn.out_proj.weight.copy_(model.blocks[i].clip_attn.out_proj.weight)
+                model.blocks[i].time_attn.out_proj.bias.copy_(model.blocks[i].clip_attn.out_proj.bias)
+                model.blocks[i].time_attn.in_proj_weight.copy_(model.blocks[i].clip_attn.in_proj_weight)
+                model.blocks[i].time_attn.in_proj_bias.copy_(model.blocks[i].clip_attn.in_proj_bias)
+        print("Time Attention module copy with self.attn")
     
     model.to(device)
     

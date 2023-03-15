@@ -370,9 +370,6 @@ class STCrossTransformer(nn.Module):
         self.embed_dim = embed_dim  # num_features for consistency with other models
         self.tubelet_size = tubelet_size
         self.composition = composition
-        self.patch_embed = PatchEmbed(
-            img_size=img_size, patch_size=patch_size, in_chans=in_chans, embed_dim=embed_dim, num_frames=all_frames, tubelet_size=self.tubelet_size)
-        num_patches = self.patch_embed.num_patches
         self.use_adapter=use_adapter
         scale = embed_dim ** -0.5
         self.clip_conv1 = nn.Conv2d(in_channels=3, out_channels=embed_dim, kernel_size=patch_size, stride=patch_size, bias=False)
@@ -402,7 +399,7 @@ class STCrossTransformer(nn.Module):
         self.apply(self._init_weights)
         if self.use_adapter:
             self._init_adpater_weight()
-        
+            
         if self.composition:
             trunc_normal_(self.head_noun.weight, std=.02)
             trunc_normal_(self.head_verb.weight, std=.02)
@@ -414,7 +411,7 @@ class STCrossTransformer(nn.Module):
             trunc_normal_(self.head.weight, std=.02)
             self.head.weight.data.mul_(init_scale)
             self.head.bias.data.mul_(init_scale)
-
+        
     def _init_weights(self, m):
         if isinstance(m, nn.Linear):
             trunc_normal_(m.weight, std=.02)
@@ -501,10 +498,10 @@ class STCrossTransformer(nn.Module):
 
 
 @register_model
-def aim_vit_base_patch16_224(pretrained=False, **kwargs):
+def vit_base_patch16_224(pretrained=False, **kwargs):
     model = STCrossTransformer(
         patch_size=16, embed_dim=768, depth=12, num_heads=12, mlp_ratio=4, qkv_bias=True,
-        norm_layer=partial(nn.LayerNorm, eps=1e-6), composition=False,use_adapter=False **kwargs)
+        norm_layer=partial(nn.LayerNorm, eps=1e-6), composition=True,use_adapter=False,**kwargs)
     #model.default_cfg = _cfg()
     return model
 
@@ -512,7 +509,7 @@ def aim_vit_base_patch16_224(pretrained=False, **kwargs):
 def aim_adapter_vit_base_patch16_224(pretrained=False, **kwargs):
     model = STCrossTransformer(
         patch_size=16, embed_dim=768, depth=12, num_heads=12, mlp_ratio=4, qkv_bias=True,
-        norm_layer=partial(nn.LayerNorm, eps=1e-6), composition=True,use_adapter=True **kwargs)
+        norm_layer=partial(nn.LayerNorm, eps=1e-6), composition=True,use_adapter=True,**kwargs)
     #model.default_cfg = _cfg()
     return model
 
