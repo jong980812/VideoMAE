@@ -343,14 +343,15 @@ def main(args, ds_init):
     if args.unfreeze_layers is not None:
         model, unfreeze_list = unfreeze_block(model,args.unfreeze_layers)
         print('unfreeze list :', unfreeze_list)
-    if model.use_adapter and 'aim' in args.vmae_model:
-        with torch.no_grad():#! module_layers에 들어가는 것만 한다. 
-            for i in range(12):
-                model.blocks[i].time_attn.out_proj.weight.copy_(model.blocks[i].clip_attn.out_proj.weight)
-                model.blocks[i].time_attn.out_proj.bias.copy_(model.blocks[i].clip_attn.out_proj.bias)
-                model.blocks[i].time_attn.in_proj_weight.copy_(model.blocks[i].clip_attn.in_proj_weight)
-                model.blocks[i].time_attn.in_proj_bias.copy_(model.blocks[i].clip_attn.in_proj_bias)
-        print("Time Attention module copy with self.attn")
+    if 'aim' in args.vmae_model:
+        if model.use_adapter:
+            with torch.no_grad():#! module_layers에 들어가는 것만 한다. 
+                for i in range(12):
+                    model.blocks[i].time_attn.out_proj.weight.copy_(model.blocks[i].clip_attn.out_proj.weight)
+                    model.blocks[i].time_attn.out_proj.bias.copy_(model.blocks[i].clip_attn.out_proj.bias)
+                    model.blocks[i].time_attn.in_proj_weight.copy_(model.blocks[i].clip_attn.in_proj_weight)
+                    model.blocks[i].time_attn.in_proj_bias.copy_(model.blocks[i].clip_attn.in_proj_bias)
+            print("Time Attention module copy with self.attn")
     
     model.to(device)
     
