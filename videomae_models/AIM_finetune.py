@@ -333,8 +333,8 @@ class Block(nn.Module):
             s_x = s_x + self.clip_mlp(s_xn) + self.drop_path(self.scale * self.S_MLP_Adapter(s_xn))   
             ############################################################################
         else:
-            s_x = s_x + self.attention(self.ln_1(s_x))
-            s_x = s_x + self.mlp(self.ln_2(s_x))
+            s_x = s_x + self.attention(self.clip_ln_1(s_x))
+            s_x = s_x + self.clip_mlp(self.clip_ln_2(s_x))
         return s_x
     
 class STCrossTransformer(nn.Module):
@@ -375,7 +375,8 @@ class STCrossTransformer(nn.Module):
         self.clip_conv1 = nn.Conv2d(in_channels=3, out_channels=embed_dim, kernel_size=patch_size, stride=patch_size, bias=False)
         self.clip_class_embedding = nn.Parameter(scale * torch.randn(embed_dim))
         self.clip_positional_embedding = nn.Parameter(scale * torch.randn((img_size // patch_size) ** 2 + 1, embed_dim))
-        self.clip_temporal_embedding = nn.Parameter(torch.zeros(1, 8, embed_dim))
+        if self.use_adapter:
+            self.clip_temporal_embedding = nn.Parameter(torch.zeros(1, 8, embed_dim))
         self.clip_ln_pre = LayerNorm(embed_dim)
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]  # stochastic depth decay rule
         self.blocks = nn.ModuleList([
@@ -465,9 +466,10 @@ class STCrossTransformer(nn.Module):
         s_x = torch.cat([self.clip_class_embedding.to(s_x.dtype) + torch.zeros(s_x.shape[0], 1, s_x.shape[-1], dtype=s_x.dtype, device=s_x.device), s_x], dim=1)
         s_x = s_x + self.clip_positional_embedding.to(s_x.dtype)
         n = s_x.shape[1]
-        s_x = rearrange(s_x, '(b t) n d -> (b n) t d', t=s_t)
-        s_x = s_x + self.clip_temporal_embedding
-        s_x = rearrange(s_x, '(b n) t d -> (b t) n d', n=n)
+        if self.use_adapter:
+            s_x = rearrange(s_x, '(b t) n d -> (b n) t d', t=s_t)
+            s_x = s_x + self.clip_temporal_embedding
+            s_x = rearrange(s_x, '(b n) t d -> (b t) n d', n=n)
         s_x = self.clip_ln_pre(s_x)
         #####################################################################        #####################################################################        
        
@@ -501,7 +503,7 @@ class STCrossTransformer(nn.Module):
 def vit_base_patch16_224(pretrained=False, **kwargs):
     model = STCrossTransformer(
         patch_size=16, embed_dim=768, depth=12, num_heads=12, mlp_ratio=4, qkv_bias=True,
-        norm_layer=partial(nn.LayerNorm, eps=1e-6), composition=True,use_adapter=False,**kwargs)
+        norm_layer=partial(nn.LayerNorm, eps=1e-6), composition=False,use_adapter=False,**kwargs)
     #model.default_cfg = _cfg()
     return model
 
