@@ -318,14 +318,14 @@ class Block(nn.Module):
             ("gelu", QuickGELU()),
             ("c_proj", nn.Linear(dim * 4, dim))
         ]))
-        self.S_MLP_Adapter = Adapter(dim, skip_connect=False)
+        # self.S_MLP_Adapter = Adapter(dim, skip_connect=False)
         self.attn_mask = None
         #####################################################################
         
         ############################ VMAE FFN ###############################
         self.norm2 = norm_layer(dim)
         self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
-        self.T_MLP_Adapter = Adapter(dim, skip_connect=False)
+        # self.T_MLP_Adapter = Adapter(dim, skip_connect=False)
         #######################################################################
         #########################################################################################
         
@@ -359,10 +359,10 @@ class Block(nn.Module):
         
         ############################ FFN Forward ##################################
         s_xn = self.clip_ln_2(s_x)
-        s_x = s_x + self.clip_mlp(s_xn) + self.drop_path(self.scale * self.S_MLP_Adapter(s_xn))
+        s_x = s_x + self.drop_path(self.clip_mlp(s_xn)) #+ self.drop_path(self.scale * self.S_MLP_Adapter(s_xn))
         
         t_xn = self.norm2(t_x)
-        t_x = t_x + self.mlp(t_xn) + self.drop_path(self.scale * self.T_MLP_Adapter(t_xn))
+        t_x = t_x + self.drop_path(self.mlp(t_xn)) #+ self.drop_path(self.scale * self.T_MLP_Adapter(t_xn))
         ############################################################################
         
         return s_x, t_x

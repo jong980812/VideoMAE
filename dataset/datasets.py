@@ -5,7 +5,7 @@ from util_tools.masking_generator import TubeMaskingGenerator
 from .kinetics import VideoClsDataset, VideoMAE
 from .ssv2 import SSVideoClsDataset
 from .epic import EpicVideoClsDataset
-
+from .diving import DivingVideoClsDataset
 
 class DataAugmentationForVideoMAE(object):
     def __init__(self, args):
@@ -86,19 +86,48 @@ def build_dataset(is_train, test_mode, args):
             new_width=320,
             args=args)
         nb_classes = 400
+    if args.data_set == 'diving-48':
+        mode = None
+        anno_path = None
+        if is_train is True:
+            mode = 'train'
+            anno_path = os.path.join(args.anno_path, 'train.csv')
+        elif test_mode is True:
+            mode = 'test'
+            anno_path = os.path.join(args.anno_path, 'val.csv')
+        else:
+            mode = 'validation'
+            anno_path = os.path.join(args.anno_path, 'val.csv')
+    
+        dataset = DivingVideoClsDataset(
+            anno_path=anno_path,
+            data_path='/',
+            mode=mode,
+            clip_len=1,
+            num_segment=args.num_frames,
+            test_num_segment=args.test_num_segment,
+            test_num_crop=args.test_num_crop,
+            num_crop=1 if not test_mode else 3,
+            keep_aspect_ratio=True,
+            crop_size=args.input_size,
+            short_side_size=args.short_side_size,
+            new_height=256,
+            new_width=320,
+            args=args)
+        nb_classes = 48
     
     elif args.data_set == 'SSV2':
         mode = None
         anno_path = None
         if is_train is True:
             mode = 'train'
-            anno_path = os.path.join(args.data_path, 'train_mp4.csv')
+            anno_path = os.path.join(args.anno_path, 'train_mp4.csv')
         elif test_mode is True:
             mode = 'test'
-            anno_path = os.path.join(args.data_path, 'test_mp4.csv')
+            anno_path = os.path.join(args.anno_path, 'val_mp4.csv')
         else:
             mode = 'validation'
-            anno_path = os.path.join(args.data_path, 'val_mp4.csv')
+            anno_path = os.path.join(args.anno_path, 'val_mp4.csv')
     
         dataset = SSVideoClsDataset(
             anno_path=anno_path,

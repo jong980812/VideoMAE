@@ -150,7 +150,7 @@ def get_args():
     parser.add_argument('--num_segments', type=int, default= 1)
     parser.add_argument('--num_frames', type=int, default= 16)
     parser.add_argument('--sampling_rate', type=int, default= 4)
-    parser.add_argument('--data_set', default='Kinetics-400', choices=['Kinetics-400', 'SSV2','MINI_SSV2', 'UCF101', 'HMDB51','image_folder', 'EPIC'],
+    parser.add_argument('--data_set', default='Kinetics-400', choices=['diving-48','Kinetics-400', 'SSV2','MINI_SSV2', 'UCF101', 'HMDB51','image_folder', 'EPIC'],
                         type=str, help='dataset')
     parser.add_argument('--pred_type', default=None, choices=['noun', 'verb', 'action'])
     parser.add_argument('--output_dir', default='',
@@ -453,12 +453,19 @@ def main(args, ds_init):
         torch.distributed.barrier()
         if global_rank == 0:
             print("Start merging results...")
-            final_top1_action ,final_top5_action, final_top1_noun, final_top5_noun, final_top1_verb, final_top5_verb = merge(args.output_dir, num_tasks)
-            print(f"Accuracy of the network on the {len(dataset_test)} test videos: Top-1: {final_top1_action:.2f}%, Top-5: {final_top5_action:.2f}%")
-            log_stats = {'Final Top-1 Action': final_top1_action,
-                        'Final Top-5 Action': final_top5_action,
-                        'Final Top-1 Noun': final_top1_noun,
-                        'Final Top-1 Verb': final_top1_verb}
+            if args.composition:
+                final_top1_action ,final_top5_action, final_top1_noun, final_top5_noun, final_top1_verb, final_top5_verb = merge(args.output_dir, num_tasks)
+                print(f"Accuracy of the network on the {len(dataset_test)} test videos: Top-1: {final_top1_action:.2f}%, Top-5: {final_top5_action:.2f}%")
+                log_stats = {'Final Top-1 Action': final_top1_action,
+                            'Final Top-5 Action': final_top5_action,
+                            'Final Top-1 Noun': final_top1_noun,
+                            'Final Top-1 Verb': final_top1_verb}
+            else:
+                print("Start merging results...")
+                final_top1 ,final_top5 = merge(args.output_dir, num_tasks)
+                print(f"Accuracy of the network on the {len(dataset_test)} test videos: Top-1: {final_top1:.2f}%, Top-5: {final_top5:.2f}%")
+                log_stats = {'Final top-1': final_top1, 
+                            'Final Top-5': final_top5}
             if args.output_dir and utils.is_main_process():
                 with open(os.path.join(args.output_dir, "log.txt"), mode="a", encoding="utf-8") as f:
                     f.write(json.dumps(log_stats) + "\n")
@@ -490,22 +497,43 @@ def main(args, ds_init):
         if data_loader_val is not None:
             test_stats = validation_one_epoch(args, data_loader_val, model, device)
             torch.cuda.empty_cache()
-            print(f"Accuracy of the network on the {len(dataset_val)} val videos: {test_stats['acc1_action']:.1f}%")
-            if max_accuracy < test_stats["acc1_action"]:
-                max_accuracy = test_stats["acc1_action"]
-                if args.output_dir and args.save_ckpt:
-                    utils.save_model(
-                        args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
-                        loss_scaler=loss_scaler, epoch="best", model_ema=model_ema)
+            
+            if args.composition:
+                print(f"Accuracy of the network on the {len(dataset_val)} val videos: {test_stats['acc1_action']:.1f}%")
+                if max_accuracy < test_stats["acc1_action"]:
+                    max_accuracy = test_stats["acc1_action"]
+                    if args.output_dir and args.save_ckpt:
+                        utils.save_model(
+                            args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
+                            loss_scaler=loss_scaler, epoch="best", model_ema=model_ema)
 
-            print(f'Max accuracy: {max_accuracy:.2f}%')
-            if log_writer is not None:
-                log_writer.update(val_acc1=test_stats['acc1_action'], head="perf", step=epoch)
+                print(f'Max accuracy: {max_accuracy:.2f}%')
+                if log_writer is not None:
+                    log_writer.update(val_acc1=test_stats['acc1_action'], head="perf", step=epoch)
 
-            log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
-                         **{f'val_{k}': v for k, v in test_stats.items()},
-                         'epoch': epoch,
-                         'n_parameters': n_parameters}
+                log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
+                            **{f'val_{k}': v for k, v in test_stats.items()},
+                            'epoch': epoch,
+                            'n_parameters': n_parameters}
+            else:
+                print(f"Accuracy of the network on the {len(dataset_val)} val videos: {test_stats['acc1']:.1f}%")
+                if max_accuracy < test_stats["acc1"]:
+                    max_accuracy = test_stats["acc1"]
+                    if args.output_dir and args.save_ckpt:
+                        utils.save_model(
+                            args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
+                            loss_scaler=loss_scaler, epoch="best", model_ema=model_ema)
+
+                print(f'Max accuracy: {max_accuracy:.2f}%')
+                if log_writer is not None:
+                    log_writer.update(val_acc1=test_stats['acc1'], head="perf", step=epoch)
+                    log_writer.update(val_acc5=test_stats['acc5'], head="perf", step=epoch)
+                    log_writer.update(val_loss=test_stats['loss'], head="perf", step=epoch)
+
+                log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
+                            **{f'val_{k}': v for k, v in test_stats.items()},
+                            'epoch': epoch,
+                            'n_parameters': n_parameters}
         else:
             log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
                          'epoch': epoch,
@@ -521,18 +549,26 @@ def main(args, ds_init):
     torch.distributed.barrier()
     if global_rank == 0:
         print("Start merging results...")
-        final_top1_action ,final_top5_action, final_top1_noun, final_top5_noun, final_top1_verb, final_top5_verb = merge(args.output_dir, num_tasks)
-        print(f"Accuracy of the network on the {len(dataset_test)} test videos: Top-1 Action: {final_top1_action:.2f}%, Top-5 Action: {final_top5_action:.2f}%")
-        log_stats = {'Final top-1 Action': final_top1_action,
-                    'Final Top-5 Action': final_top5_action,
-                    'Final Top-1 Noun': final_top1_noun,
-                    'Final Top-1 Verb': final_top1_verb,
-                    'Final Top-5 Noun': final_top5_noun,
-                    'Final Top-5 Verb': final_top5_verb}
-        if args.output_dir and utils.is_main_process():
-            with open(os.path.join(args.output_dir, "log.txt"), mode="a", encoding="utf-8") as f:
-                f.write(json.dumps(log_stats) + "\n")
-
+        if args.composition:
+            final_top1_action ,final_top5_action, final_top1_noun, final_top5_noun, final_top1_verb, final_top5_verb = merge(args.output_dir, num_tasks)
+            print(f"Accuracy of the network on the {len(dataset_test)} test videos: Top-1 Action: {final_top1_action:.2f}%, Top-5 Action: {final_top5_action:.2f}%")
+            log_stats = {'Final top-1 Action': final_top1_action,
+                        'Final Top-5 Action': final_top5_action,
+                        'Final Top-1 Noun': final_top1_noun,
+                        'Final Top-1 Verb': final_top1_verb,
+                        'Final Top-5 Noun': final_top5_noun,
+                        'Final Top-5 Verb': final_top5_verb}
+            if args.output_dir and utils.is_main_process():
+                with open(os.path.join(args.output_dir, "log.txt"), mode="a", encoding="utf-8") as f:
+                    f.write(json.dumps(log_stats) + "\n")
+        else:
+            final_top1 ,final_top5 = merge(args.output_dir, num_tasks)
+            print(f"Accuracy of the network on the {len(dataset_test)} test videos: Top-1: {final_top1:.2f}%, Top-5: {final_top5:.2f}%")
+            log_stats = {'Final top-1': final_top1,
+                        'Final Top-5': final_top5}
+            if args.output_dir and utils.is_main_process():
+                with open(os.path.join(args.output_dir, "log.txt"), mode="a", encoding="utf-8") as f:
+                    f.write(json.dumps(log_stats) + "\n")
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
