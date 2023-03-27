@@ -445,7 +445,7 @@ def main(args, ds_init):
     if args.composition:
         from engine_for_compomodel import train_one_epoch, validation_one_epoch, final_test, merge
     else:
-        from engine_for_onemodel import train_one_epoch, validation_one_epoch, final_test, merge
+        from engine_for_finetuning import train_one_epoch, validation_one_epoch, final_test, merge
 
     if args.eval:
         preds_file = os.path.join(args.output_dir, str(global_rank) + '.txt')

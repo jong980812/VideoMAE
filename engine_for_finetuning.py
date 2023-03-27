@@ -4,9 +4,9 @@ import math
 import sys
 from typing import Iterable, Optional
 import torch
-from mixup import Mixup
+from util_tools.mixup import Mixup
 from timm.utils import accuracy, ModelEma
-import utils
+import util_tools.utils as utils
 from scipy.special import softmax
 
 
@@ -21,7 +21,7 @@ def get_loss_scale_for_deepspeed(model):
     return optimizer.loss_scale if hasattr(optimizer, "loss_scale") else optimizer.cur_scale
     
 
-def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
+def train_one_epoch(args,model: torch.nn.Module, criterion: torch.nn.Module,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
                     device: torch.device, epoch: int, loss_scaler, max_norm: float = 0,
                     model_ema: Optional[ModelEma] = None, mixup_fn: Optional[Mixup] = None, log_writer=None,
@@ -141,7 +141,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
 
 
 @torch.no_grad()
-def validation_one_epoch(data_loader, model, device):
+def validation_one_epoch(args,data_loader, model, device):
     criterion = torch.nn.CrossEntropyLoss()
 
     metric_logger = utils.MetricLogger(delimiter="  ")
@@ -177,7 +177,7 @@ def validation_one_epoch(data_loader, model, device):
 
 
 @torch.no_grad()
-def final_test(data_loader, model, device, file):
+def final_test(args,data_loader, model, device, file):
     criterion = torch.nn.CrossEntropyLoss()
 
     metric_logger = utils.MetricLogger(delimiter="  ")

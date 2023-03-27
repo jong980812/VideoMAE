@@ -410,8 +410,8 @@ class STCrossTransformer(nn.Module):
             self.head_noun.bias.data.mul_(init_scale)
         else:
             trunc_normal_(self.head.weight, std=.02)
-            self.head.weight.data.mul_(init_scale)
-            self.head.bias.data.mul_(init_scale)
+            # self.head.weight.data.mul_(init_scale)
+            # self.head.bias.data.mul_(init_scale)
         
     def _init_weights(self, m):
         if isinstance(m, nn.Linear):
@@ -500,10 +500,17 @@ class STCrossTransformer(nn.Module):
 
 
 @register_model
-def vit_base_patch16_224(pretrained=False, **kwargs):
+def original_clip(pretrained=False, **kwargs):
     model = STCrossTransformer(
         patch_size=16, embed_dim=768, depth=12, num_heads=12, mlp_ratio=4, qkv_bias=True,
         norm_layer=partial(nn.LayerNorm, eps=1e-6), composition=False,use_adapter=False,**kwargs)
+    #model.default_cfg = _cfg()
+    return model
+@register_model
+def compo_vit_base_patch16_224(pretrained=False, **kwargs):
+    model = STCrossTransformer(
+        patch_size=16, embed_dim=768, depth=12, num_heads=12, mlp_ratio=4, qkv_bias=True,
+        norm_layer=partial(nn.LayerNorm, eps=1e-6), composition=True,use_adapter=False,**kwargs)
     #model.default_cfg = _cfg()
     return model
 
