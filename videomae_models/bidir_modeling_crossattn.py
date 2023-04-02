@@ -408,6 +408,10 @@ class STCrossTransformer(nn.Module):
         self.clip_positional_embedding = nn.Parameter(scale * torch.randn((img_size // patch_size) ** 2 + 1, embed_dim))
         self.clip_temporal_embedding = nn.Parameter(torch.zeros(1, 8, embed_dim))
         self.clip_ln_pre = LayerNorm(embed_dim)
+        # self.noun_head_weight = nn.Parameter(torch.Tensor([0.1]))
+        # self.verb_head_weight = nn.Parameter(torch.Tensor([0.1]))
+        if not self.composition:
+            self.fuse_head= nn.Linear(embed_dim*2,embed_dim)
 
         if use_learnable_pos_emb:
             self.pos_embed = nn.Parameter(torch.zeros(1, num_patches, embed_dim))
@@ -445,10 +449,10 @@ class STCrossTransformer(nn.Module):
         if self.composition:
             trunc_normal_(self.head_noun.weight, std=.02)
             trunc_normal_(self.head_verb.weight, std=.02)
-            # self.head_verb.weight.data.mul_(init_scale)
-            # self.head_verb.bias.data.mul_(init_scale)
-            # self.head_noun.weight.data.mul_(init_scale)
-            # self.head_noun.bias.data.mul_(init_scale)
+            self.head_verb.weight.data.mul_(init_scale)
+            self.head_verb.bias.data.mul_(init_scale)
+            self.head_noun.weight.data.mul_(init_scale)
+            self.head_noun.bias.data.mul_(init_scale)
         else:
             trunc_normal_(self.head.weight, std=.02)
             self.head.weight.data.mul_(init_scale)
@@ -538,11 +542,15 @@ class STCrossTransformer(nn.Module):
             s_x, t_x = self.forward_features(x)
             s_x = self.head_noun(s_x)
             t_x = self.head_verb(t_x)
+            # s_x = s_x * self.noun_head_weight
+            # t_x = t_x * self.verb_head_weight
             return s_x, t_x
         else:
-            x = self.forward(x)
-            x = self.head(x)
-            return x
+            s_x, t_x = self.forward_features(x)
+            concat_tensor=torch.cat([s_x,t_x],dim=1)#[batch, 768+768]
+            y_x = self.fuse_head(concat_tensor)
+            y_x = self.head(y_x)
+            return y_x
 
 
 
