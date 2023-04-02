@@ -196,7 +196,8 @@ def get_args():
     parser.add_argument('--unfreeze_layers', default=None, nargs='+', type=str)
     parser.add_argument('--slack_api', type=str,default=None)
     parser.add_argument('--composition', action='store_true')
-    
+    parser.add_argument('--fusion_method', default='add', choices=['add','mul','concat','weight'],
+                        type=str, help='fusion_method')
     
     
     
@@ -332,6 +333,7 @@ def main(args, ds_init):
           drop_block_rate=None,
           use_mean_pooling=args.use_mean_pooling,
           init_scale=args.init_scale,
+          fusion_method=args.fusion_method
       )
     
     if args.fine_tune is not None:
@@ -446,7 +448,7 @@ def main(args, ds_init):
         from engine_for_compomodel import train_one_epoch, validation_one_epoch, final_test, merge
     else:
         from engine_for_finetuning import train_one_epoch, validation_one_epoch, final_test, merge
-
+    
     if args.eval:
         preds_file = os.path.join(args.output_dir, str(global_rank) + '.txt')
         test_stats = final_test(args, data_loader_test, model, device, preds_file)
