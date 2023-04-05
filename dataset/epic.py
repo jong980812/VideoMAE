@@ -157,10 +157,10 @@ class EpicVideoClsDataset(Dataset):
                temporal_start = chunk_nb # 0/1
                spatial_start = int(split_nb * spatial_step)
                if buffer.shape[1] >= buffer.shape[2]:
-                    buffer = buffer[temporal_start::2, \
+                    buffer = buffer[temporal_start::self.test_num_segment, \
                          spatial_start:spatial_start + self.short_side_size, :, :]
                else:
-                    buffer = buffer[temporal_start::2, \
+                    buffer = buffer[temporal_start::self.test_num_segment, \
                          :, spatial_start:spatial_start + self.short_side_size, :]
 
                buffer = self.data_transform(buffer)
@@ -197,7 +197,7 @@ class EpicVideoClsDataset(Dataset):
           buffer = buffer.permute(3, 0, 1, 2)
           # Perform data augmentation.
           scl, asp = (
-               [0.08, 1.0],
+               [0.5, 1.0],
                [0.75, 1.3333],
           )
 
@@ -253,8 +253,16 @@ class EpicVideoClsDataset(Dataset):
           if self.mode == 'test':
                all_index = []
                tick = len(vr) / float(self.num_segment)
-               all_index = list(np.array([int(tick / 2.0 + tick * x) for x in range(self.num_segment)] +
-                                   [int(tick * x) for x in range(self.num_segment)]))
+               '''
+               tick이 아무리 짧아도 1이상임. 애초에 8,16,32도 안되는 비디오를 해당 frame으로 샘플링하는게 말이 안됌. 
+               Epick도 최소 프레임 16이니까 tick은 1이상임.
+               따라서 all_index는 무조건 32장만들어짐.temporal view 4로 늘려도 32장 뽑혀서 의미없음.
+               '''
+               # all_index = list(np.array([int(tick / 2.0 + tick * x) for x in range(self.num_segment)] +
+               #                     [int(tick * x) for x in range(self.num_segment)]))
+               for i in range(self.test_num_segment):
+                    all_index += [int(tick * float(i)/float(self.test_num_segment)+tick*x) for x in range(self.num_segment)]
+               all_index = list(np.array(all_index))#!
                while len(all_index) < (self.num_segment * self.test_num_segment):
                     all_index.append(all_index[-1])
                all_index = list(np.sort(np.array(all_index))) 

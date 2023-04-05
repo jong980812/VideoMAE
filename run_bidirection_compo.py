@@ -588,7 +588,7 @@ def main(args, ds_init):
             'text' : cluster,
             }
             attach_list=[attach_dict] 
-            contents=f"Training time is {job_time}\n Top 1 Accuracy is {final_top1_action}"
+            contents=f"Job_name:{job_name}\nTraining time is {job_time}\nTop 1 Accuracy is {final_top1_action},{final_top1_noun},{final_top1_verb}"
             notice_message(Token, "#notice-job", contents, attach_list)
     
 

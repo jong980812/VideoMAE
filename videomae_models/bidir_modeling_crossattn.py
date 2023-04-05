@@ -504,7 +504,8 @@ class STCrossTransformer(nn.Module):
 
     def forward_features(self, x):
         B = x.shape[0]
-        s_x = x[:, :, 1::2, :, :] # pick even frames (8 frame)
+        clip_start_frame=random.randint(0,1)
+        s_x = x[:, :, clip_start_frame::2, :, :] # pick even frames (8 frame)
         ######################## AIM spatial path #########################
         s_t = s_x.shape[2]
         s_x = rearrange(s_x, 'b c t h w -> (b t) c h w')
