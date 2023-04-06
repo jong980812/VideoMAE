@@ -5,6 +5,7 @@ from util_tools.masking_generator import TubeMaskingGenerator
 from .kinetics import VideoClsDataset, VideoMAE
 from .ssv2 import SSVideoClsDataset
 from .epic import EpicVideoClsDataset
+from .epic_dense import EpicDenseVideoClsDataset
 from .diving import DivingVideoClsDataset
 
 class DataAugmentationForVideoMAE(object):
@@ -205,7 +206,36 @@ def build_dataset(is_train, test_mode, args):
             new_width=320,
             args=args)
         nb_classes = 300
+    elif args.data_set == 'EPIC_dense':
+        mode = None
+        anno_path = None
+        if is_train is True:
+            mode = 'train'
+            anno_path = os.path.join(args.anno_path, 'epic100_compo_train.csv')
+        elif test_mode is True:
+            mode = 'test'
+            anno_path = os.path.join(args.anno_path, 'epic100_compo_val.csv')
+        else:
+            mode = 'validation'
+            anno_path = os.path.join(args.anno_path, 'epic100_compo_val.csv')
 
+        dataset = EpicDenseVideoClsDataset(
+            anno_path=anno_path,
+            data_path=args.data_path,
+            mode=mode,
+            clip_len=args.num_frames,
+            frame_sample_rate=args.sampling_rate,
+            num_segment=1,
+            test_num_segment=args.test_num_segment,
+            test_num_crop=args.test_num_crop,
+            num_crop=1 if not test_mode else 3,
+            keep_aspect_ratio=True,
+            crop_size=args.input_size,
+            short_side_size=args.short_side_size,
+            new_height=256,
+            new_width=320,
+            args=args)
+        nb_classes = 300
     elif args.data_set == 'UCF101':
         mode = None
         anno_path = None

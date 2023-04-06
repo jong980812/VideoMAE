@@ -197,7 +197,7 @@ class EpicVideoClsDataset(Dataset):
           buffer = buffer.permute(3, 0, 1, 2)
           # Perform data augmentation.
           scl, asp = (
-               [0.5, 1.0],
+               [0.1, 1.0],
                [0.75, 1.3333],
           )
 
@@ -211,7 +211,7 @@ class EpicVideoClsDataset(Dataset):
                inverse_uniform_sampling=False,
                aspect_ratio=asp,
                scale=scl,
-               motion_shift=False
+               motion_shift=True
           )
 
           if self.rand_erase:
