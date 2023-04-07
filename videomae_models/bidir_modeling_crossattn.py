@@ -544,11 +544,19 @@ class STCrossTransformer(nn.Module):
     def forward(self, x):
         if self.composition:
             s_x, t_x = self.forward_features(x)
-            s_x = self.head_noun(s_x)
-            t_x = self.head_verb(t_x)
+            s_x = self.head_noun(s_x).unsqueeze(dim=-1)
+            t_x = self.head_verb(t_x).unsqueeze(dim=-1)
+            attn = s_x@t_x.transpose(-2,-1)
+            
+            t2s = attn.softmax(dim=-1)
+            t2s = t2s @ t_x
+            s2t = attn.transpose(-2,-1).softmax(dim=-1)
+            s2t = s2t @ s_x
             # s_x = s_x * self.noun_head_weight
             # t_x = t_x * self.verb_head_weight
-            return s_x, t_x
+            s_x = s_x+t2s
+            t_x = t_x+s2t
+            return s_x.squeeze(dim=-1), t_x.squeeze(dim=-1)
         else:
             s_x, t_x = self.forward_features(x)
             if self.fusion_method == 'add':
