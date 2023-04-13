@@ -274,20 +274,21 @@ class CrossAttentionT2S(nn.Module):
 class Block(nn.Module):
 
     def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, qk_scale=None, drop=0., attn_drop=0.,
-                 drop_path=0., init_values=None, num_layer=0, act_layer=nn.GELU, norm_layer=nn.LayerNorm, attn_head_dim=None):
+                 drop_path=0., init_values=None, num_layer=0, act_layer=nn.GELU, norm_layer=nn.LayerNorm, attn_head_dim=None,cross=False,adapter=False):
         super().__init__()
-        self.cross = None
+        self.cross = cross
+        self.adapter = adapter
         self.num_layer = num_layer
         self.num_heads = num_heads
-        self.scale = 0.5
+        self.scale = 1.0
         mlp_hidden_dim = int(dim * mlp_ratio)
         self.act = act_layer()
-        
         ###################################### MHSA code #####################################
         ############################ AIM MHSA ###########################
         self.clip_ln_1 = LayerNorm(dim)
         self.clip_attn = nn.MultiheadAttention(dim, num_heads)
-        self.S_Adapter = Adapter(dim)
+        if self.adapter:
+            self.S_Adapter = Adapter(dim)
         ##################################################################
         
         ############################ VMAE MHSA ###########################
@@ -295,19 +296,21 @@ class Block(nn.Module):
         self.attn = Attention(
             dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale,
             attn_drop=attn_drop, proj_drop=drop, attn_head_dim=attn_head_dim)
-        self.T_Adapter = Adapter(dim)
+        if self.adapter:
+            self.T_Adapter = Adapter(dim)
         ##################################################################
         #########################################################################################
         
         ###################################### Cross attention ####################################
-        self.cross_s_down = nn.Linear(dim, dim//2)
-        self.cross_t_down = nn.Linear(dim, dim//2)
-        self.ln_s_cross = norm_layer(dim//2)
-        self.ln_t_cross = norm_layer(dim//2)
-        self.t2s_cross = CrossAttentionT2S(dim//2, n_head=num_heads)
-        self.s2t_cross = CrossAttentionS2T(dim//2, n_head=num_heads)
-        self.cross_s_up = nn.Linear(dim//2, dim)
-        self.cross_t_up = nn.Linear(dim//2, dim)
+        if self.cross:
+            self.cross_s_down = nn.Linear(dim, dim//2)
+            self.cross_t_down = nn.Linear(dim, dim//2)
+            self.ln_s_cross = norm_layer(dim//2)
+            self.ln_t_cross = norm_layer(dim//2)
+            self.t2s_cross = CrossAttentionT2S(dim//2, n_head=num_heads)
+            self.s2t_cross = CrossAttentionS2T(dim//2, n_head=num_heads)
+            self.cross_s_up = nn.Linear(dim//2, dim)
+            self.cross_t_up = nn.Linear(dim//2, dim)
         ###########################################################################################
         
         ###################################### FFN code #########################################
@@ -318,14 +321,16 @@ class Block(nn.Module):
             ("gelu", QuickGELU()),
             ("c_proj", nn.Linear(dim * 4, dim))
         ]))
-        self.S_MLP_Adapter = Adapter(dim, skip_connect=False)
+        if self.adapter:
+            self.S_MLP_Adapter = Adapter(dim, skip_connect=False)
         self.attn_mask = None
         #####################################################################
         
         ############################ VMAE FFN ###############################
         self.norm2 = norm_layer(dim)
         self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
-        self.T_MLP_Adapter = Adapter(dim, skip_connect=False)
+        if self.adapter:
+            self.T_MLP_Adapter = Adapter(dim, skip_connect=False)
         #######################################################################
         #########################################################################################
         
@@ -343,26 +348,39 @@ class Block(nn.Module):
         
         ############################ MHSA Forward #############################
         # AIM Space MHSA
-        s_x = s_x + self.S_Adapter(self.attention(self.clip_ln_1(s_x))) # original space multi head self attention
+        if self.adapter:
+            s_x = s_x + self.S_Adapter(self.attention(self.clip_ln_1(s_x))) # original space multi head self attention
+        else:
+            s_x = s_x + self.attention(self.clip_ln_1(s_x))
         # VMAE Time MHSA
-        t_x = t_x + self.T_Adapter(self.attn(self.norm1(t_x)))
+        if self.adapter:
+            t_x = t_x + self.T_Adapter(self.attn(self.norm1(t_x)))
+        else:
+            t_x = t_x + self.attn(self.norm1(t_x))
         ########################################################################
         
         ############################ Cross Forward #############################
-        n_s_x = self.ln_s_cross(self.cross_s_down(s_x))
-        n_t_x = self.ln_t_cross(self.cross_t_down(t_x))
-        c_s_x = self.cross_s_up(self.act(self.t2s_cross(n_s_x, n_t_x)))
-        c_t_x = self.cross_t_up(self.act(self.s2t_cross(n_s_x, n_t_x)))
-        s_x = s_x + self.drop_path(c_s_x)
-        t_x = t_x + self.drop_path(c_t_x)
+        if self.cross:
+            n_s_x = self.ln_s_cross(self.cross_s_down(s_x))
+            n_t_x = self.ln_t_cross(self.cross_t_down(t_x))
+            c_s_x = self.cross_s_up(self.act(self.t2s_cross(n_s_x, n_t_x)))
+            c_t_x = self.cross_t_up(self.act(self.s2t_cross(n_s_x, n_t_x)))
+            s_x = s_x + self.drop_path(c_s_x)
+            t_x = t_x + self.drop_path(c_t_x)
         #########################################################################
         
         ############################ FFN Forward ##################################
         s_xn = self.clip_ln_2(s_x)
-        s_x = s_x + self.clip_mlp(s_xn)+ self.drop_path(self.scale * self.S_MLP_Adapter(s_xn))
+        if self.adapter:
+            s_x = s_x + self.clip_mlp(s_xn)+ self.drop_path(self.scale * self.S_MLP_Adapter(s_xn))
+        else:
+            s_x = s_x + self.clip_mlp(s_xn)
         
         t_xn = self.norm2(t_x)
-        t_x = t_x + self.mlp(t_xn) + self.drop_path(self.scale * self.T_MLP_Adapter(t_xn))
+        if self.adapter:
+            t_x = t_x + self.mlp(t_xn) + self.drop_path(self.scale * self.T_MLP_Adapter(t_xn))
+        else:
+            t_x = t_x +self.mlp(t_xn) 
         ############################################################################
         
         return s_x, t_x
@@ -405,6 +423,7 @@ class STCrossTransformer(nn.Module):
         self.fusion_method=fusion_method
         scale = embed_dim ** -0.5
         self.clip_conv1 = nn.Conv2d(in_channels=3, out_channels=embed_dim, kernel_size=patch_size, stride=patch_size, bias=False)
+    
         self.clip_class_embedding = nn.Parameter(scale * torch.randn(embed_dim))
         self.clip_positional_embedding = nn.Parameter(scale * torch.randn((img_size // patch_size) ** 2 + 1, embed_dim))
         self.clip_temporal_embedding = nn.Parameter(torch.zeros(1, 8, embed_dim))
@@ -429,8 +448,9 @@ class STCrossTransformer(nn.Module):
             Block(
                 dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
                 drop=drop_rate, attn_drop=attn_drop_rate, drop_path=dpr[i], norm_layer=norm_layer,
-                init_values=init_values, num_layer=i)
+                init_values=init_values, num_layer=i,cross=True,adapter=True)
             for i in range(depth)])
+        
         
         self.clip_ln_post = LayerNorm(embed_dim)
         self.norm = nn.Identity() if use_mean_pooling else norm_layer(embed_dim)
@@ -504,8 +524,8 @@ class STCrossTransformer(nn.Module):
 
     def forward_features(self, x):
         B = x.shape[0]
-        clip_start_frame=random.randint(0,1)
-        s_x = x[:, :, clip_start_frame::2, :, :] # pick even frames (8 frame)
+        # clip_start_frame=random.randint(0,1)
+        s_x = x[:, :, 1::2, :, :] # pick even frames (8 frame)
         ######################## AIM spatial path #########################
         s_t = s_x.shape[2]
         s_x = rearrange(s_x, 'b c t h w -> (b t) c h w')
@@ -537,30 +557,21 @@ class STCrossTransformer(nn.Module):
         s_x = rearrange(s_x, '(b t) n d -> b t n d', b=B)
         s_x = self.clip_ln_post(s_x[:,:,0,:].mean(1)) # all cls tokens avg pooling
         t_x = self.vmae_fc_norm(t_x.mean(1)) # all patch avg pooling
-        
+
+ 
         return s_x, t_x
 
 
     def forward(self, x):
         if self.composition:
             s_x, t_x = self.forward_features(x)
-            s_x = self.head_noun(s_x).unsqueeze(dim=-1)
-            t_x = self.head_verb(t_x).unsqueeze(dim=-1)
-            attn = s_x@t_x.transpose(-2,-1)
-            
-            t2s = attn.softmax(dim=-1)
-            t2s = t2s @ t_x
-            s2t = attn.transpose(-2,-1).softmax(dim=-1)
-            s2t = s2t @ s_x
-            # s_x = s_x * self.noun_head_weight
-            # t_x = t_x * self.verb_head_weight
-            s_x = s_x+t2s
-            t_x = t_x+s2t
-            return s_x.squeeze(dim=-1), t_x.squeeze(dim=-1)
+            s_x = self.head_noun(s_x)
+            t_x = self.head_verb(t_x)
+            return s_x, t_x
         else:
             s_x, t_x = self.forward_features(x)
             if self.fusion_method == 'add':
-                y_x = (s_x + t_x)
+                y_x = (s_x + t_x)/2.0
             elif self.fusion_method == 'mul':
                 y_x = s_x * t_x
             elif self.fusion_method == 'concat':
