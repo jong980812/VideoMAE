@@ -364,6 +364,7 @@ class STCrossTransformer(nn.Module):
                  composition=False,
                  pretrained_cfg = None,
                  use_adapter=False,
+                 fusion_method=None,
                  ):
         super().__init__()
         self.num_classes = num_classes
@@ -372,6 +373,7 @@ class STCrossTransformer(nn.Module):
         self.composition = composition
         self.use_adapter=use_adapter
         scale = embed_dim ** -0.5
+        self.fusion_method=fusion_method
         self.clip_conv1 = nn.Conv2d(in_channels=3, out_channels=embed_dim, kernel_size=patch_size, stride=patch_size, bias=False)
         self.clip_class_embedding = nn.Parameter(scale * torch.randn(embed_dim))
         self.clip_positional_embedding = nn.Parameter(scale * torch.randn((img_size // patch_size) ** 2 + 1, embed_dim))
@@ -456,8 +458,8 @@ class STCrossTransformer(nn.Module):
 
     def forward_features(self, x):
         B = x.shape[0]
-        s_x = x[:, :, 1::2, :, :] # pick even frames (8 frame)
         ######################## AIM spatial path #########################
+        s_x= x
         s_t = s_x.shape[2]
         s_x = rearrange(s_x, 'b c t h w -> (b t) c h w')
         s_x = self.clip_conv1(s_x) # shape = [*, embeddim, grid, grid]

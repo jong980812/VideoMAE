@@ -42,6 +42,8 @@ def get_args():
 
     parser.add_argument('--drop', type=float, default=0.0, metavar='PCT',
                         help='Dropout rate (default: 0.)')
+    parser.add_argument('--head_drop', type=float, default=0.0, metavar='PCT',
+                        help='Dropout rate (default: 0.)')
     parser.add_argument('--attn_drop_rate', type=float, default=0.0, metavar='PCT',
                         help='Attention dropout rate (default: 0.)')
     parser.add_argument('--drop_path', type=float, default=0.1, metavar='PCT',
@@ -333,7 +335,8 @@ def main(args, ds_init):
           drop_block_rate=None,
           use_mean_pooling=args.use_mean_pooling,
           init_scale=args.init_scale,
-          fusion_method=args.fusion_method
+          fusion_method=args.fusion_method,
+        #   head_drop_rate=args.head_drop
       )
     
     if args.fine_tune is not None:
@@ -588,7 +591,7 @@ def main(args, ds_init):
             'text' : cluster,
             }
             attach_list=[attach_dict] 
-            contents=f"Job_name:{job_name}\nTraining time is {job_time}\nTop 1 Accuracy is {final_top1_action},{final_top1_noun},{final_top1_verb}"
+            contents=f"Job_name:{job_name}\nTraining time is {job_time}\nTop 1 Accuracy is {final_top1_action},{final_top1_noun},{final_top1_verb}" if args.composition else f"Job_name:{job_name}\nTraining time is {job_time}\nTop 1 Accuracy is {final_top1}"
             notice_message(Token, "#notice-job", contents, attach_list)
     
 

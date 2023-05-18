@@ -181,7 +181,8 @@ class CrossAttentionS2T(nn.Module):
         head_dim = dim // self.num_head
         self.scale = head_dim ** -0.5
         all_head_dim = head_dim * self.num_head
-        self.space_time_pos = nn.Parameter(self.scale * torch.randn((197 * 8, dim)))
+        self.clip_space_pos = nn.Parameter(self.scale * torch.randn((196, dim)))
+        self.vmae_space_pos = nn.Parameter(self.scale * torch.randn((196, dim)))
         
         #여기에 cross attn t2s module이 들어가야 한다.
         self.s2t_q = nn.Linear(dim, all_head_dim, bias=False)
@@ -195,14 +196,17 @@ class CrossAttentionS2T(nn.Module):
     
     def s2t_cross_attn(self, s_x, t_x): # s_x=[n (b t) d], t_x=[b n d]
         B, _, _ = t_x.shape
-        s_x = rearrange(s_x, 'n (b t) d -> b (t n) d', b=B) # batch -> token
-        s_x = s_x + self.space_time_pos ## sapce time position encoding
+        s_x_pat = s_x[1:, :, :]
+        s_x_pat = rearrange(s_x_pat, 'n b d -> b n d') # batch -> token
+        s_x_pat = s_x_pat + self.clip_space_pos
+        t_x = rearrange(t_x, 'b (t n) d -> (b t) n d', t=8)
+        t_x = t_x + self.vmae_space_pos
         s2t_q_bias = self.s2t_q_bias
         s2t_kv_bias = self.s2t_kv_bias
         
         s2t_q = F.linear(input=t_x, weight=self.s2t_q.weight, bias=s2t_q_bias)
         s2t_q = rearrange(s2t_q, 'b n (h d) -> b h n d', h=self.num_head)
-        s2t_kv = F.linear(input=s_x, weight=self.s2t_kv.weight, bias=s2t_kv_bias)
+        s2t_kv = F.linear(input=s_x_pat, weight=self.s2t_kv.weight, bias=s2t_kv_bias)
         s2t_kv = rearrange(s2t_kv, 'b n (e h d) -> e b h n d',e=2, h=self.num_head)
         s2t_k, s2t_v = s2t_kv[0], s2t_kv[1]
         
@@ -212,8 +216,9 @@ class CrossAttentionS2T(nn.Module):
         s2t_attn = s2t_attn.softmax(dim=-1)
         
         t_x = (s2t_attn @ s2t_v)
-        t_x = rearrange(t_x, 'b h n d -> b n (h d)')
+        t_x = rearrange(t_x, 'b h t d -> b t (h d)')
         t_x = self.t2s_proj(t_x)
+        t_x = rearrange(t_x, '(b t) n d -> b (t n) d', b=B) 
         return t_x
 
     def forward(self, s_x: torch.Tensor, t_x: torch.Tensor):
@@ -229,7 +234,8 @@ class CrossAttentionT2S(nn.Module):
         head_dim = dim // self.num_head
         self.scale = head_dim ** -0.5
         all_head_dim = head_dim * self.num_head
-        # self.space_pos = nn.Parameter(self.scale * torch.randn((8, dim))) 왠지 original vmae에 nosie가 되는거같다 끄고 해보자.
+        self.clip_time_pos = nn.Parameter(self.scale * torch.randn((8, dim)))
+        self.vmae_time_pos = nn.Parameter(self.scale * torch.randn((8, dim))) #왠지 original vmae에 nosie가 되는거같다 끄고 해보자.
         
         self.t2s_q = nn.Linear(dim, all_head_dim, bias=False) # 197 tokens(cls+patch) * num_frames
         self.t2s_q_bias = nn.Parameter(torch.zeros(all_head_dim))
@@ -244,7 +250,10 @@ class CrossAttentionT2S(nn.Module):
         B, _, _ = t_x.shape
         s_x_cls, s_x_pat = s_x[0, :, :], s_x[1:, :, :]
         s_x_pat = rearrange(s_x_pat, 'n (b t) d -> (b n) t d', b=B) # batch -> token
+        s_x_pat = s_x_pat + self.clip_time_pos
         t_x = rearrange(t_x, 'b (t n) d -> (b n) t d', t=8)
+        t_x = t_x + self.vmae_time_pos
+        
         # t_x = t_x + self.space_pos
         t2s_q_bias = self.t2s_q_bias
         t2s_kv_bias = self.t2s_kv_bias
@@ -280,7 +289,7 @@ class Block(nn.Module):
         self.adapter = adapter
         self.num_layer = num_layer
         self.num_heads = num_heads
-        self.scale = 1.0
+        self.scale = 0.5
         mlp_hidden_dim = int(dim * mlp_ratio)
         self.act = act_layer()
         ###################################### MHSA code #####################################
@@ -379,6 +388,7 @@ class Block(nn.Module):
         t_xn = self.norm2(t_x)
         if self.adapter:
             t_x = t_x + self.mlp(t_xn) + self.drop_path(self.scale * self.T_MLP_Adapter(t_xn))
+            # t_x = t_x + self.drop_path(self.T_MLP_Adapter(self.mlp(t_xn)))
         else:
             t_x = t_x +self.mlp(t_xn) 
         ############################################################################
@@ -402,6 +412,7 @@ class STCrossTransformer(nn.Module):
                  drop_rate=0., 
                  attn_drop_rate=0.,
                  drop_path_rate=0., 
+                 head_drop_rate=0.,
                  norm_layer=nn.LayerNorm, 
                  init_values=0.,
                  use_learnable_pos_emb=False,
@@ -423,15 +434,18 @@ class STCrossTransformer(nn.Module):
         self.fusion_method=fusion_method
         scale = embed_dim ** -0.5
         self.clip_conv1 = nn.Conv2d(in_channels=3, out_channels=embed_dim, kernel_size=patch_size, stride=patch_size, bias=False)
-    
         self.clip_class_embedding = nn.Parameter(scale * torch.randn(embed_dim))
         self.clip_positional_embedding = nn.Parameter(scale * torch.randn((img_size // patch_size) ** 2 + 1, embed_dim))
-        self.clip_temporal_embedding = nn.Parameter(torch.zeros(1, 8, embed_dim))
+        # self.clip_temporal_embedding = nn.Parameter(torch.zeros(1, 8, embed_dim))
         self.clip_ln_pre = LayerNorm(embed_dim)
+        # if self.composition:
+        #     self.S_head_Adapter = Adapter(embed_dim, mlp_ratio=0.25,skip_connect=False)
+        #     self.T_head_Adapter = Adapter(embed_dim, mlp_ratio=0.25, skip_connect=False)
         if not self.composition:
             if self.fusion_method == 'weight':
-                self.weight_verb = nn.Parameter(torch.Tensor(1.))
-                self.weight_noun = nn.Paramter(torch.Tensor(1.))
+                # self.get_head_noun_weight=Mlp(embed_dim,embed_dim//2,1)
+                # self.get_head_verb_weight=Mlp(embed_dim,embed_dim//2,1)
+                pass
             elif self.fusion_method == 'concat':
                 self.fuse_head= nn.Linear(embed_dim*2,embed_dim)
         if use_learnable_pos_emb:
@@ -450,23 +464,38 @@ class STCrossTransformer(nn.Module):
                 drop=drop_rate, attn_drop=attn_drop_rate, drop_path=dpr[i], norm_layer=norm_layer,
                 init_values=init_values, num_layer=i,cross=True,adapter=True)
             for i in range(depth)])
-        
+        # self.drop_path = DropPath(dpr[-1])
+
         
         self.clip_ln_post = LayerNorm(embed_dim)
-        self.norm = nn.Identity() if use_mean_pooling else norm_layer(embed_dim)
         self.vmae_fc_norm = norm_layer(embed_dim) if use_mean_pooling else None
         
         if self.composition:
             self.head_verb = nn.Linear(embed_dim, 97)
+            self.head_verb_dropout = nn.Dropout(head_drop_rate)
             self.head_noun = nn.Linear(embed_dim, 300)
+            self.head_noun_dropout = nn.Dropout(head_drop_rate)
+            self.noun_last_Adapter = Adapter(embed_dim, skip_connect=False)
+            self.verb_last_Adapter = Adapter(embed_dim, skip_connect=False)
         else:
+            self.noun_last_Adapter = Adapter(embed_dim, skip_connect=False)
+            self.verb_last_Adapter = Adapter(embed_dim, skip_connect=False)
             self.head = nn.Linear(embed_dim, num_classes) if num_classes > 0 else nn.Identity()
+            self.head_dropout = nn.Dropout(head_drop_rate)
+            
+            # self.head_s = nn.Linear(embed_dim, num_classes) if num_classes > 0 else nn.Identity()
+            # self.head_t = nn.Linear(embed_dim, num_classes) if num_classes > 0 else nn.Identity()
 
         if use_learnable_pos_emb:
             trunc_normal_(self.pos_embed, std=.02)
 
         self.apply(self._init_weights)
-        self._init_adpater_weight()
+        self._init_adpater_weight() 
+        # if self.composition:
+        #     nn.init.constant_(self.S_head_Adapter.D_fc2.weight, 0)
+        #     nn.init.constant_(self.S_head_Adapter.D_fc2.bias, 0)
+        #     nn.init.constant_(self.T_head_Adapter.D_fc2.weight, 0)
+        #     nn.init.constant_(self.T_head_Adapter.D_fc2.bias, 0)
         
         if self.composition:
             trunc_normal_(self.head_noun.weight, std=.02)
@@ -474,12 +503,26 @@ class STCrossTransformer(nn.Module):
             self.head_verb.weight.data.mul_(init_scale)
             self.head_verb.bias.data.mul_(init_scale)
             self.head_noun.weight.data.mul_(init_scale)
-            self.head_noun.bias.data.mul_(init_scale)
+            self.head_noun.bias.data.mul_(init_scale)            
+            trunc_normal_(self.noun_last_Adapter.D_fc2.weight, std=2e-5)
+            trunc_normal_(self.verb_last_Adapter.D_fc2.weight, std=2e-5)
         else:
             # pass
+            # trunc_normal_(self.head_s.weight, std=.02)
+            # trunc_normal_(self.head_t.weight, std=.02)
+            # self.head_s.weight.data.mul_(init_scale)
+            # self.head_t.weight.data.mul_(init_scale)
+            # self.head_s.bias.data.mul_(init_scale)
+            # self.head_t.bias.data.mul_(init_scale)
             trunc_normal_(self.head.weight, std=.02)
+            trunc_normal_(self.noun_last_Adapter.D_fc2.weight, std=2e-5)
+            trunc_normal_(self.verb_last_Adapter.D_fc2.weight, std=2e-5)
             self.head.weight.data.mul_(init_scale)
             self.head.bias.data.mul_(init_scale)
+            # nn.init.constant_(self.noun_last_Adapter.D_fc2.weight, 1e-5)
+            # nn.init.constant_(self.verb_last_Adapter.D_fc2.weight, 1e-5)            
+
+            
 
     def _init_weights(self, m):
         if isinstance(m, nn.Linear):
@@ -510,7 +553,7 @@ class STCrossTransformer(nn.Module):
 
     @torch.jit.ignore
     def no_weight_decay(self):
-        return {'clip_temporal_embedding','pos_embed'}
+        return {'clip_time_pos','clip_space_pos','vmae_space_pos','vmae_time_pos','pos_embed'}
 
     def get_classifier(self):
         return self.head
@@ -534,10 +577,6 @@ class STCrossTransformer(nn.Module):
         s_x = s_x.permute(0, 2, 1) # shape[batch, patchnum, embeddim]
         s_x = torch.cat([self.clip_class_embedding.to(s_x.dtype) + torch.zeros(s_x.shape[0], 1, s_x.shape[-1], dtype=s_x.dtype, device=s_x.device), s_x], dim=1)
         s_x = s_x + self.clip_positional_embedding.to(s_x.dtype)
-        n = s_x.shape[1]
-        s_x = rearrange(s_x, '(b t) n d -> (b n) t d', t=s_t)
-        s_x = s_x + self.clip_temporal_embedding
-        s_x = rearrange(s_x, '(b n) t d -> (b t) n d', n=n)
         s_x = self.clip_ln_pre(s_x)
         #####################################################################
         
@@ -558,30 +597,36 @@ class STCrossTransformer(nn.Module):
         s_x = self.clip_ln_post(s_x[:,:,0,:].mean(1)) # all cls tokens avg pooling
         t_x = self.vmae_fc_norm(t_x.mean(1)) # all patch avg pooling
 
- 
+
         return s_x, t_x
 
 
     def forward(self, x):
         if self.composition:
             s_x, t_x = self.forward_features(x)
+            # s_x = self.head_noun_dropout(self.noun_last_Adapter(s_x))
             s_x = self.head_noun(s_x)
+            # t_x = self.head_verb_dropout(self.verb_last_Adapter(t_x))
             t_x = self.head_verb(t_x)
             return s_x, t_x
         else:
             s_x, t_x = self.forward_features(x)
             if self.fusion_method == 'add':
-                y_x = (s_x + t_x)/2.0
+                y_x = self.noun_last_Adapter(s_x) + self.verb_last_Adapter(t_x)
+                # y_x = s_x + t_x
+                y_x = self.head_dropout(y_x)
             elif self.fusion_method == 'mul':
                 y_x = s_x * t_x
             elif self.fusion_method == 'concat':
                 concat_tensor=torch.cat([s_x,t_x],dim=1)#[batch, 768+768]
                 y_x = self.fuse_head(concat_tensor)
             elif self.fusion_method == 'weight':
-                y_x = s_x * self.weight_noun + t_x * self.weight_verb
-                
+                s_x = self.head_s(s_x)
+                t_x = self.head_t(t_x)
+                y_x=s_x+t_x
+                return y_x
             y_x = self.head(y_x)
-            return y_x
+            return y_x 
 
 
 

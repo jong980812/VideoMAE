@@ -65,7 +65,7 @@ def build_dataset(is_train, test_mode, args):
             anno_path = os.path.join(args.anno_path, 'kinetics400_train.csv')
         elif test_mode is True:
             mode = 'test'
-            anno_path = os.path.join(args.anno_path, 'kinetics400_test.csv') 
+            anno_path = os.path.join(args.anno_path, 'kinetics400_val.csv') 
         else:  
             mode = 'validation'
             anno_path = os.path.join(args.anno_path, 'kinetics400_val.csv') 
