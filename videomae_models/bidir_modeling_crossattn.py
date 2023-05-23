@@ -422,7 +422,7 @@ class STCrossTransformer(nn.Module):
                  use_mean_pooling=True,
                  composition=False,
                  pretrained_cfg = None,
-                 fusion_method=None):
+                 fusion_method="add"):
         super().__init__()
         self.num_classes = num_classes
         self.embed_dim = embed_dim  # num_features for consistency with other models
@@ -612,8 +612,8 @@ class STCrossTransformer(nn.Module):
         else:
             s_x, t_x = self.forward_features(x)
             if self.fusion_method == 'add':
-                y_x = self.noun_last_Adapter(s_x) + self.verb_last_Adapter(t_x)
-                # y_x = s_x + t_x
+                # y_x = self.noun_last_Adapter(s_x) + self.verb_last_Adapter(t_x)
+                y_x = s_x + t_x
                 y_x = self.head_dropout(y_x)
             elif self.fusion_method == 'mul':
                 y_x = s_x * t_x

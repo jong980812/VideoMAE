@@ -548,32 +548,34 @@ def main(args, ds_init):
                 log_writer.flush()
             with open(os.path.join(args.output_dir, "log.txt"), mode="a", encoding="utf-8") as f:
                 f.write(json.dumps(log_stats) + "\n")
-
-    preds_file = os.path.join(args.output_dir, str(global_rank) + '.txt')
-    test_stats = final_test(args, data_loader_test, model, device, preds_file)
-    torch.distributed.barrier()
-    if global_rank == 0:
-        print("Start merging results...")
-        if args.composition:
-            final_top1_action ,final_top5_action, final_top1_noun, final_top5_noun, final_top1_verb, final_top5_verb = merge(args.output_dir, num_tasks)
-            print(f"Accuracy of the network on the {len(dataset_test)} test videos: Top-1 Action: {final_top1_action:.2f}%, Top-5 Action: {final_top5_action:.2f}%")
-            log_stats = {'Final top-1 Action': final_top1_action,
-                        'Final Top-5 Action': final_top5_action,
-                        'Final Top-1 Noun': final_top1_noun,
-                        'Final Top-1 Verb': final_top1_verb,
-                        'Final Top-5 Noun': final_top5_noun,
-                        'Final Top-5 Verb': final_top5_verb}
-            if args.output_dir and utils.is_main_process():
-                with open(os.path.join(args.output_dir, "log.txt"), mode="a", encoding="utf-8") as f:
-                    f.write(json.dumps(log_stats) + "\n")
-        else:
-            final_top1 ,final_top5 = merge(args.output_dir, num_tasks)
-            print(f"Accuracy of the network on the {len(dataset_test)} test videos: Top-1: {final_top1:.2f}%, Top-5: {final_top5:.2f}%")
-            log_stats = {'Final top-1': final_top1,
-                        'Final Top-5': final_top5}
-            if args.output_dir and utils.is_main_process():
-                with open(os.path.join(args.output_dir, "log.txt"), mode="a", encoding="utf-8") as f:
-                    f.write(json.dumps(log_stats) + "\n")
+    for i in range(2):
+        preds_file = os.path.join(args.output_dir, str(global_rank) + '.txt')
+        test_stats = final_test(args, data_loader_test, model, device, preds_file)
+        torch.distributed.barrier()
+        if global_rank == 0:
+            print("Start merging results...")
+            if args.composition:
+                final_top1_action ,final_top5_action, final_top1_noun, final_top5_noun, final_top1_verb, final_top5_verb = merge(args.output_dir, num_tasks)
+                print(f"Accuracy of the network on the {len(dataset_test)} test videos: Top-1 Action: {final_top1_action:.2f}%, Top-5 Action: {final_top5_action:.2f}%")
+                log_stats = {'Final top-1 Action': final_top1_action,
+                            'Final Top-5 Action': final_top5_action,
+                            'Final Top-1 Noun': final_top1_noun,
+                            'Final Top-1 Verb': final_top1_verb,
+                            'Final Top-5 Noun': final_top5_noun,
+                            'Final Top-5 Verb': final_top5_verb}
+                if args.output_dir and utils.is_main_process():
+                    with open(os.path.join(args.output_dir, "log.txt"), mode="a", encoding="utf-8") as f:
+                        f.write(json.dumps(log_stats) + "\n")
+            else:
+                final_top1 ,final_top5 = merge(args.output_dir, num_tasks)
+                print(f"Accuracy of the network on the {len(dataset_test)} test videos: Top-1: {final_top1:.2f}%, Top-5: {final_top5:.2f}%")
+                log_stats = {'Final top-1': final_top1,
+                            'Final Top-5': final_top5}
+                if args.output_dir and utils.is_main_process():
+                    with open(os.path.join(args.output_dir, "log.txt"), mode="a", encoding="utf-8") as f:
+                        f.write(json.dumps(log_stats) + "\n")
+        laod_eval_weights(model, os.path.join(args.output_dir,'checkpoint-best/mp_rank_00_model_states.pt'), args)
+        
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))

@@ -146,11 +146,11 @@ class DivingVideoClsDataset(Dataset):
             temporal_start = chunk_nb # 0/1
             spatial_start = int(split_nb * spatial_step)
             if buffer.shape[1] >= buffer.shape[2]:
-                buffer = buffer[temporal_start::2, \
-                       spatial_start:spatial_start + self.short_side_size, :, :]
+                    buffer = buffer[temporal_start::self.test_num_segment, \
+                         spatial_start:spatial_start + self.short_side_size, :, :]
             else:
-                buffer = buffer[temporal_start::2, \
-                       :, spatial_start:spatial_start + self.short_side_size, :]
+                buffer = buffer[temporal_start::self.test_num_segment, \
+                        :, spatial_start:spatial_start + self.short_side_size, :]
 
             buffer = self.data_transform(buffer)
             return buffer, self.test_label_array[index], sample.split("/")[-1].split(".")[0], \
@@ -244,8 +244,17 @@ class DivingVideoClsDataset(Dataset):
         if self.mode == 'test':
             all_index = []
             tick = len(vr) / float(self.num_segment)
-            all_index = list(np.array([int(tick / 2.0 + tick * x) for x in range(self.num_segment)] +
-                               [int(tick * x) for x in range(self.num_segment)]))
+            # all_index = list(np.array([int(tick / 2.0 + tick * x) for x in range(self.num_segment)] +
+            #                    [int(tick * x) for x in range(self.num_segment)]))
+            # while len(all_index) < (self.num_segment * self.test_num_segment):
+            #     all_index.append(all_index[-1])
+            # all_index = list(np.sort(np.array(all_index))) 
+            # vr.seek(0)
+            # buffer = vr.get_batch(all_index).asnumpy()
+            # return buffer
+            for i in range(self.test_num_segment):
+                    all_index += [int(tick * float(i)/float(self.test_num_segment)+tick*x) for x in range(self.num_segment)]
+            all_index = list(np.array(all_index))#!
             while len(all_index) < (self.num_segment * self.test_num_segment):
                 all_index.append(all_index[-1])
             all_index = list(np.sort(np.array(all_index))) 
