@@ -1,11 +1,10 @@
-# VideoMAE Installation
+#  Installation
 
 The codebase is mainly built with following libraries:
 
-- Python 3.6 or higher
+- Python 3.8
 
 - [PyTorch](https://pytorch.org/) and [torchvision](https://github.com/pytorch/vision). <br>
-  We can successfully reproduce the main results under two settings below:<br>
   Tesla **A100** (40G): CUDA 11.1 + PyTorch 1.8.0 + torchvision 0.9.0<br>
   Tesla **V100** (32G): CUDA 10.1 + PyTorch 1.6.0 + torchvision 0.7.0
 

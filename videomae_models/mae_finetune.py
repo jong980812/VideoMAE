@@ -348,6 +348,7 @@ class STCrossTransformer(nn.Module):
                  composition=False,
                  pretrained_cfg = None,
                  use_adapter=False,
+                 fusion_method=None
                  ):
         super().__init__()
         self.num_classes = num_classes
@@ -492,7 +493,13 @@ def mae_adapter_vit_base_patch16_224(pretrained=False, **kwargs):
         norm_layer=partial(nn.LayerNorm, eps=1e-6), composition=True,use_adapter=True, **kwargs)
     #model.default_cfg = _cfg()
     return model
-
+@register_model
+def videoMAE(pretrained=False, **kwargs):
+    model = STCrossTransformer(
+        patch_size=16, embed_dim=768, depth=12, num_heads=12, mlp_ratio=4, qkv_bias=True,
+        norm_layer=partial(nn.LayerNorm, eps=1e-6), composition=False,use_adapter=False, **kwargs)
+    #model.default_cfg = _cfg()
+    return model
 
 
 

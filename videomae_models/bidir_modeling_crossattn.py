@@ -612,7 +612,7 @@ class STCrossTransformer(nn.Module):
         else:
             s_x, t_x = self.forward_features(x)
             if self.fusion_method == 'add':
-                # y_x = self.noun_last_Adapter(s_x) + self.verb_last_Adapter(t_x)
+                y_x = self.noun_last_Adapter(s_x) + self.verb_last_Adapter(t_x)
                 y_x = s_x + t_x
                 y_x = self.head_dropout(y_x)
             elif self.fusion_method == 'mul':
